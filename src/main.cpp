@@ -15,6 +15,7 @@
 #include "imgui_impl_dx11.h"
 
 #include "app.h"
+#include "cli.h"
 #include "ui/main_window.h"
 
 // Forward declare message handler from imgui_impl_win32.cpp
@@ -63,6 +64,32 @@ int WINAPI WinMain(
 
     // Set up crash handler
     SetUnhandledExceptionFilter(CrashHandler);
+
+    // Parse command line
+    lumos::CliArgs cli_args = lumos::Cli::parse(GetCommandLineW());
+
+    switch (cli_args.action) {
+    case lumos::CliAction::ShowHelp:
+        lumos::Cli::printHelp();
+        return 0;
+
+    case lumos::CliAction::ShowVersion:
+        lumos::Cli::printVersion();
+        return 0;
+
+    case lumos::CliAction::SetGamma:
+        {
+            lumos::platform::Gamma gamma;
+            gamma.initialize();
+            gamma.applyAll(cli_args.gamma_value);
+            // Don't restore on exit for CLI mode
+        }
+        return 0;
+
+    case lumos::CliAction::ShowGui:
+    default:
+        break; // Continue to GUI
+    }
 
     // Register window class
     WNDCLASSEXW wc = {};
@@ -238,6 +265,12 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_TRAYICON:
         if (g_app) {
             g_app->handleTrayMessage(wParam, lParam);
+        }
+        return 0;
+
+    case WM_HOTKEY:
+        if (g_app) {
+            g_app->handleHotkeyMessage(wParam);
         }
         return 0;
 
