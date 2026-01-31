@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "about_dialog.h"
+
 namespace lumos {
 class App;
 }
@@ -20,6 +22,7 @@ public:
 private:
     float gamma_slider_ = 1.0f;
     bool first_frame_ = true;
+    AboutDialog about_dialog_;
 };
 
 } // namespace lumos::ui

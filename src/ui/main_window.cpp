@@ -56,6 +56,13 @@ void MainWindow::render(App& app)
         gamma_slider_ = static_cast<float>(app.getGamma());
     }
 
+    ImGui::Spacing();
+
+    // About button
+    if (ImGui::Button("About", ImVec2(-1, 0))) {
+        about_dialog_.open();
+    }
+
     // Hotkey hint
     ImGui::Spacing();
     ImGui::TextDisabled("Hotkeys: Ctrl+Alt+Up/Down, Ctrl+Alt+R");
@@ -66,6 +73,9 @@ void MainWindow::render(App& app)
     ImGui::TextDisabled("%s", app.getStatusText());
 
     ImGui::End();
+
+    // Render dialogs
+    about_dialog_.render(nullptr);
 }
 
 } // namespace lumos::ui

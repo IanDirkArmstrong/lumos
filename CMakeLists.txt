@@ -31,6 +31,7 @@ add_executable(lumos WIN32
     src/platform/win32/gamma.cpp
     src/platform/win32/hotkeys.cpp
     src/platform/win32/tray.cpp
+    src/ui/about_dialog.cpp
     src/ui/main_window.cpp
     resources/lumos.rc
 )
