@@ -7,6 +7,7 @@
 #include "config.h"
 #include "platform/win32/gamma.h"
 #include "platform/win32/tray.h"
+#include "platform/win32/hotkeys.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -26,8 +27,11 @@ public:
     // Shutdown application (call before exit)
     void shutdown();
 
-    // Set gamma value (applies immediately)
+    // Set gamma value (applies immediately to all monitors)
     void setGamma(double value);
+
+    // Adjust gamma by delta
+    void adjustGamma(double delta);
 
     // Reset to original gamma
     void resetGamma();
@@ -47,8 +51,14 @@ public:
     // Handle tray messages
     bool handleTrayMessage(WPARAM wParam, LPARAM lParam);
 
+    // Handle hotkey messages
+    bool handleHotkeyMessage(WPARAM wParam);
+
     // Get status text for UI
     const char* getStatusText() const { return status_text_; }
+
+    // Get monitor count
+    size_t getMonitorCount() const { return gamma_.getMonitorCount(); }
 
     // Get reference to gamma module (for crash handler)
     platform::Gamma& getGammaRef() { return gamma_; }
@@ -57,12 +67,15 @@ private:
     Config config_;
     platform::Gamma gamma_;
     platform::Tray tray_;
+    platform::Hotkeys hotkeys_;
 
     HWND hwnd_ = nullptr;
     double current_gamma_ = 1.0;
     bool window_visible_ = true;
     bool should_exit_ = false;
     char status_text_[64] = "Ready";
+
+    static constexpr double GAMMA_STEP = 0.1;
 };
 
 } // namespace lumos

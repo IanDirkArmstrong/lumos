@@ -4,6 +4,7 @@
 
 #include "app.h"
 #include <cstdio>
+#include <algorithm>
 
 namespace lumos {
 
@@ -15,14 +16,14 @@ bool App::initialize(HWND hwnd, UINT tray_msg)
     config_.load();
     current_gamma_ = config_.last_gamma;
 
-    // Capture original gamma for restoration
-    if (!gamma_.captureOriginal()) {
-        std::snprintf(status_text_, sizeof(status_text_), "Warning: Could not capture original gamma");
+    // Initialize gamma (captures original ramps for all monitors)
+    if (!gamma_.initialize()) {
+        std::snprintf(status_text_, sizeof(status_text_), "Warning: Could not initialize gamma");
     }
 
-    // Apply saved gamma
+    // Apply saved gamma to all monitors
     if (current_gamma_ != 1.0) {
-        gamma_.apply(current_gamma_);
+        gamma_.applyAll(current_gamma_);
     }
 
     // Create tray icon
@@ -35,18 +36,33 @@ bool App::initialize(HWND hwnd, UINT tray_msg)
     tray_.on_reset = [this]() { resetGamma(); };
     tray_.on_exit = [this]() { requestExit(); };
 
-    std::snprintf(status_text_, sizeof(status_text_), "Applied to primary display");
+    // Initialize hotkeys
+    if (!hotkeys_.initialize(hwnd_)) {
+        std::snprintf(status_text_, sizeof(status_text_), "Warning: Some hotkeys failed to register");
+    }
+
+    // Set up hotkey callbacks
+    hotkeys_.on_increase = [this]() { adjustGamma(GAMMA_STEP); };
+    hotkeys_.on_decrease = [this]() { adjustGamma(-GAMMA_STEP); };
+    hotkeys_.on_reset = [this]() { resetGamma(); };
+
+    size_t count = gamma_.getMonitorCount();
+    std::snprintf(status_text_, sizeof(status_text_), "Applied to %zu display%s",
+                  count, count == 1 ? "" : "s");
     return true;
 }
 
 void App::shutdown()
 {
+    // Shutdown hotkeys
+    hotkeys_.shutdown();
+
     // Save config
     config_.last_gamma = current_gamma_;
     config_.save();
 
-    // Restore original gamma
-    gamma_.restoreOriginal();
+    // Restore original gamma on all monitors
+    gamma_.restoreAll();
 
     // Remove tray icon
     tray_.destroy();
@@ -54,27 +70,31 @@ void App::shutdown()
 
 void App::setGamma(double value)
 {
-    if (value < 0.1) value = 0.1;
-    if (value > 9.0) value = 9.0;
-
+    value = std::clamp(value, 0.1, 9.0);
     current_gamma_ = value;
 
-    if (gamma_.apply(value)) {
-        std::snprintf(status_text_, sizeof(status_text_), "Applied to primary display");
+    if (gamma_.applyAll(value)) {
+        size_t count = gamma_.getMonitorCount();
+        std::snprintf(status_text_, sizeof(status_text_), "Applied to %zu display%s",
+                      count, count == 1 ? "" : "s");
     } else {
         std::snprintf(status_text_, sizeof(status_text_), "Failed to apply gamma");
     }
+}
+
+void App::adjustGamma(double delta)
+{
+    setGamma(current_gamma_ + delta);
 }
 
 void App::resetGamma()
 {
     current_gamma_ = 1.0;
 
-    if (gamma_.restoreOriginal()) {
+    if (gamma_.restoreAll()) {
         std::snprintf(status_text_, sizeof(status_text_), "Reset to original");
     } else {
-        // Fall back to setting gamma to 1.0
-        gamma_.apply(1.0);
+        gamma_.applyAll(1.0);
         std::snprintf(status_text_, sizeof(status_text_), "Reset to default (1.0)");
     }
 }
@@ -107,6 +127,11 @@ void App::requestExit()
 bool App::handleTrayMessage(WPARAM wParam, LPARAM lParam)
 {
     return tray_.handleMessage(wParam, lParam);
+}
+
+bool App::handleHotkeyMessage(WPARAM wParam)
+{
+    return hotkeys_.handleMessage(wParam);
 }
 
 } // namespace lumos
