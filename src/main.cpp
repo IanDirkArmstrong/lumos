@@ -32,6 +32,18 @@ static ID3D11RenderTargetView* g_mainRenderTargetView = nullptr;
 // Global app instance for WndProc access
 static lumos::App* g_app = nullptr;
 
+// Crash safety - restore gamma on unhandled exception
+static lumos::platform::Gamma* g_crash_gamma = nullptr;
+
+LONG WINAPI CrashHandler(EXCEPTION_POINTERS* exceptionInfo)
+{
+    (void)exceptionInfo;
+    if (g_crash_gamma) {
+        g_crash_gamma->restoreOriginal();
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 // Forward declarations
 bool CreateDeviceD3D(HWND hWnd);
 void CleanupDeviceD3D();
@@ -48,6 +60,9 @@ int WINAPI WinMain(
     (void)hPrevInstance;
     (void)lpCmdLine;
     (void)nCmdShow;
+
+    // Set up crash handler
+    SetUnhandledExceptionFilter(CrashHandler);
 
     // Register window class
     WNDCLASSEXW wc = {};
@@ -92,6 +107,9 @@ int WINAPI WinMain(
     lumos::App app;
     g_app = &app;
     app.initialize(hwnd, WM_TRAYICON);
+
+    // Enable crash safety
+    g_crash_gamma = &app.getGammaRef();
 
     // UI
     lumos::ui::MainWindow main_window;

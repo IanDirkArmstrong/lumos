@@ -50,6 +50,9 @@ public:
     // Get status text for UI
     const char* getStatusText() const { return status_text_; }
 
+    // Get reference to gamma module (for crash handler)
+    platform::Gamma& getGammaRef() { return gamma_; }
+
 private:
     Config config_;
     platform::Gamma gamma_;
