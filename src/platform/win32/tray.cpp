@@ -23,7 +23,7 @@ bool Tray::create(HWND parent, UINT callback_msg)
     nid_.uID = 1;
     nid_.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid_.uCallbackMessage = callback_msg_;
-    nid_.hIcon = LoadIconW(nullptr, IDI_APPLICATION); // Default icon for now
+    nid_.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(IDI_APPLICATION)); // Default icon for now
     wcscpy_s(nid_.szTip, L"Lumos - Gamma Control");
 
     if (!Shell_NotifyIconW(NIM_ADD, &nid_)) {

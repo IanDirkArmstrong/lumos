@@ -71,7 +71,7 @@ int WINAPI WinMain(
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = L"LumosWindowClass";
-    wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+    wc.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(IDI_APPLICATION));
     RegisterClassExW(&wc);
 
     // Create window
