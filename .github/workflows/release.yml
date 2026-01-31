@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure CMake
+        run: cmake -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package Release
+        run: |
+          mkdir release
+          copy build\Release\lumos.exe release\
+          copy LICENSE release\
+          copy README.md release\ 2>nul || echo README.md not found
+        shell: cmd
+
+      - name: Create Release Archive
+        run: |
+          cd release
+          7z a ../lumos-windows-x64.zip *
+        shell: cmd
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: lumos-windows-x64.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
