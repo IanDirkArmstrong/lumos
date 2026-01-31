@@ -5,6 +5,7 @@
 #pragma once
 
 #include "about_dialog.h"
+#include "help_dialog.h"
 
 namespace lumos {
 class App;
@@ -23,6 +24,7 @@ private:
     float gamma_slider_ = 1.0f;
     bool first_frame_ = true;
     AboutDialog about_dialog_;
+    HelpDialog help_dialog_;
 };
 
 } // namespace lumos::ui

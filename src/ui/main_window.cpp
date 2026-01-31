@@ -58,8 +58,13 @@ void MainWindow::render(App& app)
 
     ImGui::Spacing();
 
-    // About button
-    if (ImGui::Button("About", ImVec2(-1, 0))) {
+    // Help and About buttons (two columns)
+    float button_width = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+    if (ImGui::Button("Help", ImVec2(button_width, 0))) {
+        help_dialog_.open();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("About", ImVec2(button_width, 0))) {
         about_dialog_.open();
     }
 
@@ -76,6 +81,7 @@ void MainWindow::render(App& app)
 
     // Render dialogs
     about_dialog_.render(nullptr);
+    help_dialog_.render(nullptr);
 }
 
 } // namespace lumos::ui
