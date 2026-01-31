@@ -41,10 +41,20 @@ jobs:
           7z a ../lumos-windows-x64.zip *
         shell: cmd
 
+      - name: Determine if prerelease
+        id: prerelease
+        run: |
+          if ("${{ github.ref_name }}" -match "^v0\.") {
+            echo "is_prerelease=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "is_prerelease=false" >> $env:GITHUB_OUTPUT
+          }
+        shell: pwsh
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: lumos-windows-x64.zip
           generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
