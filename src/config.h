@@ -7,7 +7,18 @@
 #include <string>
 #include <filesystem>
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+
+#include <windows.h>
+
 namespace lumos {
+
+struct HotkeyBinding {
+    UINT modifiers = MOD_CONTROL | MOD_ALT;
+    UINT key = 0;
+};
 
 class Config {
 public:
@@ -21,6 +32,11 @@ public:
 
     // Settings
     double last_gamma = 1.0;
+
+    // Hotkey bindings
+    HotkeyBinding hotkey_increase = { MOD_CONTROL | MOD_ALT, VK_UP };
+    HotkeyBinding hotkey_decrease = { MOD_CONTROL | MOD_ALT, VK_DOWN };
+    HotkeyBinding hotkey_reset = { MOD_CONTROL | MOD_ALT, 'R' };
 
 private:
     std::filesystem::path getConfigDir();

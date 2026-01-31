@@ -35,7 +35,6 @@ bool Config::load()
 {
     auto config_path = getConfigPath();
     if (!std::filesystem::exists(config_path)) {
-        // Create default config
         return save();
     }
 
@@ -44,7 +43,6 @@ bool Config::load()
 
     std::string line;
     while (std::getline(file, line)) {
-        // Simple INI parsing
         if (line.starts_with("LastValue=")) {
             try {
                 last_gamma = std::stod(line.substr(10));
@@ -54,6 +52,7 @@ bool Config::load()
                 last_gamma = 1.0;
             }
         }
+        // TODO: Parse hotkey bindings in future version
     }
 
     return true;
@@ -64,7 +63,6 @@ bool Config::save()
     auto config_dir = getConfigDir();
     if (config_dir.empty()) return false;
 
-    // Create directory if needed
     std::filesystem::create_directories(config_dir);
 
     auto config_path = getConfigPath();
@@ -73,6 +71,10 @@ bool Config::save()
 
     file << "[Gamma]\n";
     file << "LastValue=" << last_gamma << "\n";
+    file << "\n";
+    file << "[Hotkeys]\n";
+    file << "; Hotkey customization coming in v1.0\n";
+    file << "; Defaults: Ctrl+Alt+Up (increase), Ctrl+Alt+Down (decrease), Ctrl+Alt+R (reset)\n";
 
     return true;
 }
