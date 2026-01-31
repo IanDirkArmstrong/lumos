@@ -10,6 +10,7 @@ add_subdirectory(third_party/imgui)
 # Main executable (WIN32 = no console window)
 add_executable(lumos WIN32
     src/main.cpp
+    src/platform/win32/gamma.cpp
     resources/lumos.rc
 )
 
