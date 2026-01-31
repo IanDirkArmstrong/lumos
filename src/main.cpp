@@ -14,14 +14,23 @@
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
 
+#include "app.h"
+#include "ui/main_window.h"
+
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+// Custom window messages
+constexpr UINT WM_TRAYICON = WM_USER + 1;
 
 // Globals for DX11
 static ID3D11Device* g_pd3dDevice = nullptr;
 static ID3D11DeviceContext* g_pd3dDeviceContext = nullptr;
 static IDXGISwapChain* g_pSwapChain = nullptr;
 static ID3D11RenderTargetView* g_mainRenderTargetView = nullptr;
+
+// Global app instance for WndProc access
+static lumos::App* g_app = nullptr;
 
 // Forward declarations
 bool CreateDeviceD3D(HWND hWnd);
@@ -47,6 +56,7 @@ int WINAPI WinMain(
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = L"LumosWindowClass";
+    wc.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
     RegisterClassExW(&wc);
 
     // Create window
@@ -66,47 +76,59 @@ int WINAPI WinMain(
         return 1;
     }
 
-    ShowWindow(hwnd, SW_SHOWDEFAULT);
-    UpdateWindow(hwnd);
-
     // Setup ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.IniFilename = nullptr; // Disable imgui.ini
 
     ImGui::StyleColorsDark();
 
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 
+    // Initialize app
+    lumos::App app;
+    g_app = &app;
+    app.initialize(hwnd, WM_TRAYICON);
+
+    // UI
+    lumos::ui::MainWindow main_window;
+
+    // Show window
+    ShowWindow(hwnd, SW_SHOWDEFAULT);
+    UpdateWindow(hwnd);
+
     // Main loop
-    bool running = true;
-    while (running)
+    while (!app.shouldExit())
     {
         MSG msg;
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))
         {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
-            if (msg.message == WM_QUIT)
-                running = false;
+            if (msg.message == WM_QUIT) {
+                app.requestExit();
+            }
         }
-        if (!running)
+
+        if (app.shouldExit())
             break;
+
+        // Skip rendering if window is hidden
+        if (!app.isWindowVisible()) {
+            Sleep(100); // Reduce CPU usage when hidden
+            continue;
+        }
 
         // Start ImGui frame
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
 
-        // Simple test window
-        ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(370, 150), ImGuiCond_FirstUseEver);
-        ImGui::Begin("Lumos", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
-        ImGui::Text("Gamma adjustment utility");
-        ImGui::Text("Window + DX11 + ImGui working!");
-        ImGui::End();
+        // Render UI
+        main_window.render(app);
 
         // Render
         ImGui::Render();
@@ -118,7 +140,10 @@ int WINAPI WinMain(
         g_pSwapChain->Present(1, 0); // VSync
     }
 
-    // Cleanup
+    // Shutdown
+    app.shutdown();
+    g_app = nullptr;
+
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
@@ -192,6 +217,12 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     switch (msg)
     {
+    case WM_TRAYICON:
+        if (g_app) {
+            g_app->handleTrayMessage(wParam, lParam);
+        }
+        return 0;
+
     case WM_SIZE:
         if (g_pd3dDevice != nullptr && wParam != SIZE_MINIMIZED)
         {
@@ -200,9 +231,29 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             CreateRenderTarget();
         }
         return 0;
+
+    case WM_SYSCOMMAND:
+        // Minimize to tray instead of taskbar
+        if ((wParam & 0xfff0) == SC_MINIMIZE) {
+            if (g_app) {
+                g_app->hideWindow();
+            }
+            return 0;
+        }
+        break;
+
+    case WM_CLOSE:
+        // Hide to tray instead of closing (unless exit requested)
+        if (g_app && !g_app->shouldExit()) {
+            g_app->hideWindow();
+            return 0;
+        }
+        break;
+
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
     }
+
     return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
