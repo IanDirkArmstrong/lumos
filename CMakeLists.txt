@@ -14,6 +14,7 @@ add_executable(lumos WIN32
     src/config.cpp
     src/platform/win32/gamma.cpp
     src/platform/win32/tray.cpp
+    src/ui/main_window.cpp
     resources/lumos.rc
 )
 
