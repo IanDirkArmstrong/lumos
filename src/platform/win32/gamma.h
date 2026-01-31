@@ -10,6 +10,8 @@
 
 #include <windows.h>
 #include <array>
+#include <vector>
+#include <string>
 
 namespace lumos::platform {
 
@@ -19,29 +21,60 @@ struct GammaRamp {
     std::array<WORD, 256> blue;
 };
 
+struct MonitorInfo {
+    HMONITOR handle;
+    std::wstring device_name;
+    std::wstring friendly_name;
+    bool is_primary;
+    GammaRamp original_ramp;
+    bool has_original;
+};
+
 class Gamma {
 public:
     Gamma() = default;
     ~Gamma();
 
-    // Capture current gamma ramp (call on startup)
+    // Enumerate monitors and capture original ramps
+    bool initialize();
+
+    // Restore all original gamma ramps
+    bool restoreAll();
+
+    // Apply gamma value to all monitors
+    bool applyAll(double value);
+
+    // Apply gamma value to specific monitor
+    bool apply(size_t monitor_index, double value);
+
+    // Restore specific monitor
+    bool restore(size_t monitor_index);
+
+    // Get monitor count
+    size_t getMonitorCount() const { return monitors_.size(); }
+
+    // Get monitor info
+    const MonitorInfo* getMonitor(size_t index) const;
+
+    // Get primary monitor index
+    size_t getPrimaryIndex() const;
+
+    // Legacy single-monitor interface (operates on primary)
     bool captureOriginal();
-
-    // Restore saved gamma ramp
     bool restoreOriginal();
-
-    // Apply gamma value (0.1 - 9.0, 1.0 = normal)
     bool apply(double value);
-
-    // Read current gamma from primary display
     double read() const;
-
-    // Check if we have a captured original
-    bool hasOriginal() const { return has_original_; }
+    bool hasOriginal() const;
 
 private:
-    GammaRamp original_ramp_{};
-    bool has_original_ = false;
+    std::vector<MonitorInfo> monitors_;
+
+    static BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor,
+                                          LPRECT lprcMonitor, LPARAM dwData);
+
+    bool captureRamp(MonitorInfo& monitor);
+    bool applyRamp(const MonitorInfo& monitor, const GammaRamp& ramp);
+    static GammaRamp buildRamp(double gamma);
 };
 
 } // namespace lumos::platform
