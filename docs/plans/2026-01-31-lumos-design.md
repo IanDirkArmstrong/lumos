@@ -10,6 +10,7 @@
 Lumos is a Windows system tray utility for monitor gamma adjustment, reimplementing the Delphi-based Gamminator project in modern C++ with ImGui.
 
 ### Goals
+
 - Direct feature parity with Gamminator
 - Modern C++ codebase (C++20)
 - Single executable, no installer required
@@ -41,6 +42,7 @@ Lumos is a Windows system tray utility for monitor gamma adjustment, reimplement
 ## Milestone Roadmap
 
 ### v0.1 "It works" - Core foundation
+
 - Tray app launches (no console window)
 - System tray icon with popup menu (Open UI, Reset, Exit)
 - ImGui window opens from tray
@@ -52,19 +54,23 @@ Lumos is a Windows system tray utility for monitor gamma adjustment, reimplement
 - Crash safety: attempt restore via `SetUnhandledExceptionFilter`
 
 ### v0.2 "Usable daily" - Power user features
+
 - Global hotkeys (increase/decrease/reset)
 - Multi-monitor support (enumerate displays, apply to all)
 - CLI: `lumos 1.2` sets gamma and exits, `lumos` opens GUI
 
 ### v0.3 "Polish" - Verification tools
+
 - Test pattern display (striped black/white)
 - Real-time gamma curve visualization
 
 ### v1.0 "Parity" - Full Gamminator feature set
+
 - Auto-calibration (detect system's valid gamma range)
 - All remaining INI settings (hotkey bindings, calibration bounds)
 
 ### Future (post-v1.0)
+
 - NVIDIA driver hooks
 - LUT support / 3D LUTs
 - Per-game profiles
@@ -101,11 +107,13 @@ lumos/
 ## Technical Specifications
 
 ### Dependencies
+
 - **ImGui** (git submodule) - UI rendering
 - **Win32 APIs** - gamma, tray, window management
 - **DirectX 11** - ImGui backend (lightweight, ships with Windows)
 
 ### Build Requirements
+
 - CMake 3.20+
 - Visual Studio 2022 Build Tools (or full VS)
 - Windows SDK 10.0.19041+
@@ -139,6 +147,7 @@ private:
 ```
 
 **Gamma calculation:** For a gamma value `g`, each ramp entry `i` (0-255) is:
+
 ```
 value = pow(i / 255.0, 1.0 / g) * 65535.0
 ```
@@ -216,6 +225,7 @@ private:
 **Config location:** `%APPDATA%\Lumos\lumos.ini`
 
 **INI format (v0.1):**
+
 ```ini
 [Gamma]
 LastValue=1.0
@@ -244,6 +254,7 @@ LastValue=1.0
 ## Safety & Crash Handling
 
 ### The Problem
+
 If Lumos crashes without restoring the original gamma ramp, the user's display stays at the modified gamma until reboot.
 
 ### Safety Measures
@@ -264,6 +275,7 @@ If Lumos crashes without restoring the original gamma ramp, the user's display s
    - If `SetDeviceGammaRamp` fails, don't update internal state
 
 ### Limitations
+
 - `taskkill /F` or power loss cannot be caught
 - User's only recourse: reboot (which resets gamma automatically)
 
@@ -320,4 +332,4 @@ jobs:
 
 - Original project: Gamminator (Delphi/Object Pascal)
 - Source location: `/Users/ian/Development/gamminator`
-- License: GPL v3
+- License: GPL v2
