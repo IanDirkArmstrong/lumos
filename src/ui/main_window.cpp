@@ -56,6 +56,10 @@ void MainWindow::render(App& app)
         gamma_slider_ = static_cast<float>(app.getGamma());
     }
 
+    // Hotkey hint
+    ImGui::Spacing();
+    ImGui::TextDisabled("Hotkeys: Ctrl+Alt+Up/Down, Ctrl+Alt+R");
+
     // Status at bottom
     ImGui::Spacing();
     ImGui::Separator();
