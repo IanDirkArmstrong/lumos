@@ -3,6 +3,7 @@
 // License: GPL v2
 
 #include "tray.h"
+#include "../../../resources/resource.h"
 
 namespace lumos::platform {
 
@@ -23,7 +24,7 @@ bool Tray::create(HWND parent, UINT callback_msg)
     nid_.uID = 1;
     nid_.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid_.uCallbackMessage = callback_msg_;
-    nid_.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(IDI_APPLICATION)); // Default icon for now
+    nid_.hIcon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDI_LUMOS));
     wcscpy_s(nid_.szTip, L"Lumos - Gamma Control");
 
     if (!Shell_NotifyIconW(NIM_ADD, &nid_)) {
@@ -54,6 +55,9 @@ void Tray::showMenu()
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, ID_RESET, L"Reset Gamma");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, ID_HELP, L"Help");
+    AppendMenuW(menu, MF_STRING, ID_ABOUT, L"About");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, ID_EXIT, L"Exit");
 
     // Required for menu to work properly from tray
@@ -74,6 +78,12 @@ void Tray::showMenu()
         break;
     case ID_RESET:
         if (on_reset) on_reset();
+        break;
+    case ID_HELP:
+        if (on_help) on_help();
+        break;
+    case ID_ABOUT:
+        if (on_about) on_about();
         break;
     case ID_EXIT:
         if (on_exit) on_exit();

@@ -4,9 +4,6 @@
 
 #pragma once
 
-#include "about_dialog.h"
-#include "help_dialog.h"
-
 namespace lumos {
 class App;
 }
@@ -20,11 +17,22 @@ public:
     // Render the window (call each frame)
     void render(App& app);
 
+    // Open tabs
+    void openHelp() { show_help_tab_ = true; }
+    void openAbout() { show_about_tab_ = true; }
+
 private:
+    void renderMenuBar();
+    void renderGammaTab(App& app);
+    void renderHelpTab();
+    void renderAboutTab();
+
     float gamma_slider_ = 1.0f;
     bool first_frame_ = true;
-    AboutDialog about_dialog_;
-    HelpDialog help_dialog_;
+
+    // Tab visibility
+    bool show_help_tab_ = false;
+    bool show_about_tab_ = false;
 };
 
 } // namespace lumos::ui

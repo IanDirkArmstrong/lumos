@@ -1,8 +1,10 @@
 // Lumos Windows resources
 #include <windows.h>
+#include "resource.h"
 
-// Application icon
+// Application icons
 IDI_LUMOS ICON "icon.ico"
+IDI_GEARS ICON "gears.ico"
 
 // Version info
 VS_VERSION_INFO VERSIONINFO

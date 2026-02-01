@@ -34,6 +34,8 @@ bool App::initialize(HWND hwnd, UINT tray_msg)
     // Set up tray callbacks
     tray_.on_open = [this]() { showWindow(); };
     tray_.on_reset = [this]() { resetGamma(); };
+    tray_.on_help = [this]() { showHelp(); };
+    tray_.on_about = [this]() { showAbout(); };
     tray_.on_exit = [this]() { requestExit(); };
 
     // Initialize hotkeys
@@ -114,6 +116,22 @@ void App::hideWindow()
         ShowWindow(hwnd_, SW_HIDE);
     }
     window_visible_ = false;
+}
+
+void App::showHelp()
+{
+    showWindow(); // Ensure window is visible
+    if (on_show_help) {
+        on_show_help();
+    }
+}
+
+void App::showAbout()
+{
+    showWindow(); // Ensure window is visible
+    if (on_show_about) {
+        on_show_about();
+    }
 }
 
 void App::requestExit()

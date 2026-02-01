@@ -17,6 +17,8 @@
 #include "app.h"
 #include "cli.h"
 #include "ui/main_window.h"
+#include "ui/theme.h"
+#include "../resources/resource.h"
 
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -98,7 +100,8 @@ int WINAPI WinMain(
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = L"LumosWindowClass";
-    wc.hIcon = LoadIconW(nullptr, MAKEINTRESOURCEW(IDI_APPLICATION));
+    wc.hIcon = LoadIconW(hInstance, MAKEINTRESOURCEW(IDI_LUMOS));
+    wc.hIconSm = LoadIconW(hInstance, MAKEINTRESOURCEW(IDI_LUMOS));
     RegisterClassExW(&wc);
 
     // Create window
@@ -108,7 +111,7 @@ int WINAPI WinMain(
         L"Lumos",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         CW_USEDEFAULT, CW_USEDEFAULT,
-        400, 200,
+        500, 300,
         nullptr, nullptr, hInstance, nullptr);
 
     if (!CreateDeviceD3D(hwnd))
@@ -125,7 +128,8 @@ int WINAPI WinMain(
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.IniFilename = nullptr; // Disable imgui.ini
 
-    ImGui::StyleColorsDark();
+    // Apply VS Code-style theme
+    lumos::ui::ApplyVSCodeTheme();
 
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
@@ -140,6 +144,10 @@ int WINAPI WinMain(
 
     // UI
     lumos::ui::MainWindow main_window;
+
+    // Connect app dialog callbacks to main window
+    app.on_show_help = [&main_window]() { main_window.openHelp(); };
+    app.on_show_about = [&main_window]() { main_window.openAbout(); };
 
     // Show window
     ShowWindow(hwnd, SW_SHOWDEFAULT);

@@ -10,11 +10,13 @@ namespace lumos::ui {
 
 void MainWindow::render(App& app)
 {
-    // Sync slider with app state on first frame
-    if (first_frame_) {
-        gamma_slider_ = static_cast<float>(app.getGamma());
-        first_frame_ = false;
+    // Always sync slider with app state (in case it was changed by hotkeys or tray menu)
+    // Only update if not actively being dragged to avoid fighting with user input
+    float current_gamma = static_cast<float>(app.getGamma());
+    if (!ImGui::IsAnyItemActive() || first_frame_) {
+        gamma_slider_ = current_gamma;
     }
+    first_frame_ = false;
 
     // Full window ImGui panel
     ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -26,13 +28,71 @@ void MainWindow::render(App& app)
         ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoBringToFrontOnFocus;
+        ImGuiWindowFlags_NoBringToFrontOnFocus |
+        ImGuiWindowFlags_MenuBar;
 
     ImGui::Begin("##MainWindow", nullptr, flags);
 
-    // Title
-    ImGui::TextUnformatted("Lumos - Gamma Control");
-    ImGui::Separator();
+    // Render menu bar
+    renderMenuBar();
+
+    // Render tab bar
+    if (ImGui::BeginTabBar("MainTabBar", ImGuiTabBarFlags_None)) {
+        // Gamma control tab (always visible, not closable)
+        if (ImGui::BeginTabItem("\xE2\x9A\x99 Gamma")) {  // ⚙ Gamma
+            renderGammaTab(app);
+            ImGui::EndTabItem();
+        }
+
+        // Help tab (closable)
+        if (show_help_tab_) {
+            if (ImGui::BeginTabItem("\xE2\x9D\x93 Help", &show_help_tab_)) {  // ❓ Help
+                renderHelpTab();
+                ImGui::EndTabItem();
+            }
+        }
+
+        // About tab (closable)
+        if (show_about_tab_) {
+            if (ImGui::BeginTabItem("\xE2\x84\xB9 About", &show_about_tab_)) {  // ℹ About
+                renderAboutTab();
+                ImGui::EndTabItem();
+            }
+        }
+
+        ImGui::EndTabBar();
+    }
+
+    ImGui::End();
+}
+
+void MainWindow::renderMenuBar()
+{
+    if (ImGui::BeginMenuBar()) {
+        if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("Exit")) {
+                // Request exit via WM_CLOSE
+                PostMessageW(GetActiveWindow(), WM_CLOSE, 0, 0);
+            }
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Help")) {
+            if (ImGui::MenuItem("Help", "F1")) {
+                show_help_tab_ = true;
+            }
+            if (ImGui::MenuItem("About")) {
+                show_about_tab_ = true;
+            }
+            ImGui::EndMenu();
+        }
+
+        ImGui::EndMenuBar();
+    }
+}
+
+void MainWindow::renderGammaTab(App& app)
+{
     ImGui::Spacing();
 
     // Gamma slider
@@ -53,22 +113,11 @@ void MainWindow::render(App& app)
     // Reset button
     if (ImGui::Button("Reset to Default", ImVec2(-1, 0))) {
         app.resetGamma();
-        gamma_slider_ = static_cast<float>(app.getGamma());
-    }
-
-    ImGui::Spacing();
-
-    // Help and About buttons (two columns)
-    float button_width = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-    if (ImGui::Button("Help", ImVec2(button_width, 0))) {
-        help_dialog_.open();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("About", ImVec2(button_width, 0))) {
-        about_dialog_.open();
+        // Slider will auto-sync on next frame
     }
 
     // Hotkey hint
+    ImGui::Spacing();
     ImGui::Spacing();
     ImGui::TextDisabled("Hotkeys: Ctrl+Alt+Up/Down, Ctrl+Alt+R");
 
@@ -76,12 +125,82 @@ void MainWindow::render(App& app)
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::TextDisabled("%s", app.getStatusText());
+}
 
-    ImGui::End();
+void MainWindow::renderHelpTab()
+{
+    ImGui::Spacing();
 
-    // Render dialogs
-    about_dialog_.render(nullptr);
-    help_dialog_.render(nullptr);
+    ImGui::TextUnformatted("Usage");
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::TextWrapped(
+        "Use the slider to adjust your monitor's gamma value. "
+        "Gamma affects the brightness and contrast of your display.");
+
+    ImGui::Spacing();
+    ImGui::BulletText("Values < 1.0: Darker image");
+    ImGui::BulletText("Value = 1.0: Normal (default)");
+    ImGui::BulletText("Values > 1.0: Brighter image");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::TextUnformatted("Global Hotkeys");
+    ImGui::Spacing();
+
+    ImGui::Columns(2, "hotkeys", false);
+    ImGui::SetColumnWidth(0, 150);
+    ImGui::Text("Ctrl+Alt+Up"); ImGui::NextColumn();
+    ImGui::Text("Increase gamma"); ImGui::NextColumn();
+    ImGui::Text("Ctrl+Alt+Down"); ImGui::NextColumn();
+    ImGui::Text("Decrease gamma"); ImGui::NextColumn();
+    ImGui::Text("Ctrl+Alt+R"); ImGui::NextColumn();
+    ImGui::Text("Reset to default"); ImGui::NextColumn();
+    ImGui::Columns(1);
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::TextUnformatted("Command Line");
+    ImGui::Spacing();
+    ImGui::TextDisabled("lumos              Open the GUI");
+    ImGui::TextDisabled("lumos 1.2          Set gamma to 1.2 and exit");
+    ImGui::TextDisabled("lumos --help       Show help");
+    ImGui::TextDisabled("lumos --version    Show version");
+}
+
+void MainWindow::renderAboutTab()
+{
+    ImGui::Spacing();
+
+    ImGui::TextUnformatted("Lumos v0.2.0");
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::TextWrapped(
+        "A modern C++ reimplementation of Gamminator, "
+        "a monitor gamma adjustment utility for Windows.");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::TextUnformatted("Attribution:");
+    ImGui::BulletText("Original Gamminator by Wolfgang Freiler (2005)");
+    ImGui::BulletText("Multi-monitor mod by Lady Eklipse (v0.5.7)");
+    ImGui::BulletText("Lumos reimplementation by Ian Dirk Armstrong");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::TextUnformatted("License: GPL v2");
+    ImGui::TextDisabled("This is free software. You may redistribute copies of it");
+    ImGui::TextDisabled("under the terms of the GNU General Public License.");
 }
 
 } // namespace lumos::ui

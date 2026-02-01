@@ -14,6 +14,7 @@
 #endif
 
 #include <windows.h>
+#include <functional>
 
 namespace lumos {
 
@@ -44,9 +45,17 @@ public:
     void hideWindow();
     bool isWindowVisible() const { return window_visible_; }
 
+    // Show dialogs
+    void showHelp();
+    void showAbout();
+
     // Request application exit
     void requestExit();
     bool shouldExit() const { return should_exit_; }
+
+    // Callbacks for showing dialogs (set from main.cpp)
+    std::function<void()> on_show_help;
+    std::function<void()> on_show_about;
 
     // Handle tray messages
     bool handleTrayMessage(WPARAM wParam, LPARAM lParam);
