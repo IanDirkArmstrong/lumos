@@ -62,6 +62,14 @@ void MainWindow::render(App& app)
             }
         }
 
+        // Test Pattern tab (closable)
+        if (show_test_pattern_tab_) {
+            if (ImGui::BeginTabItem("\xE2\x96\xA6 Pattern", &show_test_pattern_tab_)) {  // ▦ Pattern
+                renderTestPatternTab();
+                ImGui::EndTabItem();
+            }
+        }
+
         ImGui::EndTabBar();
     }
 
@@ -85,6 +93,10 @@ void MainWindow::renderMenuBar()
             }
             if (ImGui::MenuItem("About")) {
                 show_about_tab_ = true;
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Test Pattern")) {
+                show_test_pattern_tab_ = true;
             }
             ImGui::EndMenu();
         }
@@ -285,6 +297,49 @@ void MainWindow::renderAboutTab()
     ImGui::TextUnformatted("License: GPL v2");
     ImGui::TextDisabled("This is free software. You may redistribute copies of it");
     ImGui::TextDisabled("under the terms of the GNU General Public License.");
+}
+
+void MainWindow::renderTestPatternTab()
+{
+    ImGui::Spacing();
+
+    ImGui::TextWrapped(
+        "This pattern helps calibrate your display. "
+        "Adjust gamma until the gray areas appear uniform in brightness.");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // Draw striped test pattern
+    const float pattern_height = 180.0f;
+    ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+    ImVec2 canvas_size = ImVec2(ImGui::GetContentRegionAvail().x, pattern_height);
+
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+    // Number of stripe pairs
+    const int num_stripes = 16;
+    const float stripe_width = canvas_size.x / num_stripes;
+
+    for (int i = 0; i < num_stripes; ++i) {
+        float x = canvas_pos.x + i * stripe_width;
+        ImU32 color = (i % 2 == 0) ? IM_COL32(0, 0, 0, 255) : IM_COL32(255, 255, 255, 255);
+        draw_list->AddRectFilled(
+            ImVec2(x, canvas_pos.y),
+            ImVec2(x + stripe_width, canvas_pos.y + canvas_size.y),
+            color);
+    }
+
+    // Border
+    draw_list->AddRect(canvas_pos,
+        ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+        IM_COL32(100, 100, 100, 255));
+
+    ImGui::Dummy(canvas_size);
+
+    ImGui::Spacing();
+    ImGui::TextDisabled("At correct gamma, alternating stripes should appear evenly bright.");
 }
 
 } // namespace lumos::ui
