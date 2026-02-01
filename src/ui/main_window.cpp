@@ -5,6 +5,7 @@
 #include "main_window.h"
 #include "../app.h"
 #include "imgui.h"
+#include <cmath>
 
 namespace lumos::ui {
 
@@ -106,6 +107,50 @@ void MainWindow::renderGammaTab(App& app)
 
     // Current value display
     ImGui::Text("Current: %.2f", gamma_slider_);
+
+    // Gamma curve visualization
+    ImGui::Spacing();
+    ImGui::TextUnformatted("Gamma Curve");
+
+    // Draw area for the curve
+    const float curve_height = 100.0f;
+    ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+    ImVec2 canvas_size = ImVec2(ImGui::GetContentRegionAvail().x, curve_height);
+
+    // Background
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    draw_list->AddRectFilled(canvas_pos,
+        ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+        IM_COL32(30, 30, 30, 255));
+
+    // Draw linear reference line (gamma = 1.0)
+    draw_list->AddLine(
+        canvas_pos,
+        ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+        IM_COL32(80, 80, 80, 255), 1.0f);
+
+    // Draw gamma curve
+    const double gamma = static_cast<double>(gamma_slider_);
+    ImVec2 prev_point = canvas_pos;
+    for (int i = 1; i <= 255; ++i) {
+        double normalized_in = i / 255.0;
+        double normalized_out = std::pow(normalized_in, 1.0 / gamma);
+
+        float x = canvas_pos.x + (i / 255.0f) * canvas_size.x;
+        float y = canvas_pos.y + canvas_size.y - static_cast<float>(normalized_out) * canvas_size.y;
+
+        ImVec2 point(x, y);
+        draw_list->AddLine(prev_point, point, IM_COL32(100, 200, 100, 255), 2.0f);
+        prev_point = point;
+    }
+
+    // Border
+    draw_list->AddRect(canvas_pos,
+        ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+        IM_COL32(60, 60, 60, 255));
+
+    // Reserve space for the canvas
+    ImGui::Dummy(canvas_size);
 
     ImGui::Spacing();
     ImGui::Spacing();
