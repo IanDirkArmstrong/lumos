@@ -6,6 +6,7 @@
 #include "../app.h"
 #include "imgui.h"
 #include <cmath>
+#include <cstdio>
 
 namespace lumos::ui {
 
@@ -101,6 +102,44 @@ void MainWindow::renderGammaTab(App& app)
     ImGui::SetNextItemWidth(-1);
     if (ImGui::SliderFloat("##Gamma", &gamma_slider_, 0.1f, 9.0f, "%.2f")) {
         app.setGamma(static_cast<double>(gamma_slider_));
+    }
+
+    // Draw tick marks at common gamma values
+    {
+        ImDrawList* draw_list = ImGui::GetWindowDrawList();
+        ImVec2 slider_min = ImGui::GetItemRectMin();
+        ImVec2 slider_max = ImGui::GetItemRectMax();
+        float slider_width = slider_max.x - slider_min.x;
+
+        // Common gamma values to mark
+        const float tick_values[] = { 1.0f, 1.8f, 2.2f, 2.5f };
+        const float gamma_min = 0.1f;
+        const float gamma_max = 9.0f;
+
+        for (float tick_val : tick_values) {
+            // Calculate position (slider uses linear mapping)
+            float t = (tick_val - gamma_min) / (gamma_max - gamma_min);
+            float x = slider_min.x + t * slider_width;
+            float y_top = slider_max.y;
+            float y_bottom = slider_max.y + 6.0f;
+
+            // Draw tick line
+            draw_list->AddLine(
+                ImVec2(x, y_top),
+                ImVec2(x, y_bottom),
+                IM_COL32(150, 150, 150, 255), 1.0f);
+
+            // Draw label
+            char label[8];
+            std::snprintf(label, sizeof(label), "%.1f", tick_val);
+            ImVec2 text_size = ImGui::CalcTextSize(label);
+            draw_list->AddText(
+                ImVec2(x - text_size.x * 0.5f, y_bottom + 2.0f),
+                IM_COL32(120, 120, 120, 255), label);
+        }
+
+        // Add spacing to account for tick marks and labels
+        ImGui::Dummy(ImVec2(0, 20.0f));
     }
 
     ImGui::Spacing();
