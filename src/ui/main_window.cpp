@@ -106,7 +106,38 @@ void MainWindow::renderGammaTab(App& app)
 {
     ImGui::Spacing();
 
-    // Gamma slider
+    // Transfer function selector
+    ImGui::TextUnformatted("Transfer Function");
+    const char* transfer_functions[] = {
+        "Power (Custom Gamma)",
+        "sRGB",
+        "Rec.709 / Rec.2020",
+        "DCI-P3 (Gamma 2.6)"
+    };
+
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::Combo("##TransferFunc", &transfer_function_index_, transfer_functions, IM_ARRAYSIZE(transfer_functions))) {
+        // Map index to TransferFunction enum
+        using TF = lumos::platform::TransferFunction;
+        TF func;
+        switch (transfer_function_index_) {
+            case 1: func = TF::sRGB; break;
+            case 2: func = TF::Rec709; break;
+            case 3: func = TF::DCIP3; break;
+            case 0:
+            default: func = TF::Power; break;
+        }
+        app.setTransferFunction(func);
+    }
+
+    ImGui::Spacing();
+
+    // Gamma slider (only enabled for Power mode)
+    bool is_power_mode = (transfer_function_index_ == 0);
+    if (!is_power_mode) {
+        ImGui::BeginDisabled();
+    }
+
     ImGui::TextUnformatted("Gamma");
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Absolute gamma value (not relative)");
@@ -187,6 +218,10 @@ void MainWindow::renderGammaTab(App& app)
         app.setGamma(static_cast<double>(gamma_slider_));
     }
 
+    if (!is_power_mode) {
+        ImGui::EndDisabled();
+    }
+
     ImGui::Spacing();
 
     // Gamma curve visualization
@@ -214,8 +249,34 @@ void MainWindow::renderGammaTab(App& app)
     const double gamma = static_cast<double>(gamma_slider_);
     ImVec2 prev_point = canvas_pos;
     for (int i = 1; i <= 255; ++i) {
-        double normalized_in = i / 255.0;
-        double normalized_out = std::pow(normalized_in, 1.0 / gamma);
+        double linear = i / 255.0;
+        double normalized_out;
+
+        // Apply the appropriate transfer function
+        switch (transfer_function_index_) {
+            case 1: { // sRGB
+                if (linear <= 0.0031308)
+                    normalized_out = 12.92 * linear;
+                else
+                    normalized_out = 1.055 * std::pow(linear, 1.0 / 2.4) - 0.055;
+                break;
+            }
+            case 2: { // Rec.709
+                if (linear < 0.018)
+                    normalized_out = 4.5 * linear;
+                else
+                    normalized_out = 1.099 * std::pow(linear, 0.45) - 0.099;
+                break;
+            }
+            case 3: { // DCI-P3
+                normalized_out = std::pow(linear, 1.0 / 2.6);
+                break;
+            }
+            case 0: // Power
+            default:
+                normalized_out = std::pow(linear, 1.0 / gamma);
+                break;
+        }
 
         float x = canvas_pos.x + (i / 255.0f) * canvas_size.x;
         float y = canvas_pos.y + canvas_size.y - static_cast<float>(normalized_out) * canvas_size.y;

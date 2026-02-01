@@ -15,6 +15,15 @@
 
 namespace lumos::platform {
 
+// Transfer function types for gamma correction
+enum class TransferFunction {
+    Power,      // Pure power-law gamma (traditional)
+    sRGB,       // sRGB with linear segment near black
+    Rec709,     // Rec.709 / Rec.2020 (broadcast standard)
+    Rec2020,    // Rec.2020 (alias for Rec709, same transfer)
+    DCIP3,      // DCI-P3 (pure gamma 2.6)
+};
+
 struct GammaRamp {
     std::array<WORD, 256> red;
     std::array<WORD, 256> green;
@@ -43,9 +52,11 @@ public:
 
     // Apply gamma value to all monitors
     bool applyAll(double value);
+    bool applyAll(TransferFunction func, double value);
 
     // Apply gamma value to specific monitor
     bool apply(size_t monitor_index, double value);
+    bool apply(size_t monitor_index, TransferFunction func, double value);
 
     // Restore specific monitor
     bool restore(size_t monitor_index);
@@ -74,7 +85,7 @@ private:
 
     bool captureRamp(MonitorInfo& monitor);
     bool applyRamp(const MonitorInfo& monitor, const GammaRamp& ramp);
-    static GammaRamp buildRamp(double gamma);
+    static GammaRamp buildRamp(TransferFunction func, double gamma);
 };
 
 } // namespace lumos::platform

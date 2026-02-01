@@ -23,7 +23,7 @@ bool App::initialize(HWND hwnd, UINT tray_msg)
 
     // Apply saved gamma to all monitors
     if (current_gamma_ != 1.0) {
-        gamma_.applyAll(current_gamma_);
+        gamma_.applyAll(transfer_function_, current_gamma_);
     }
 
     // Create tray icon
@@ -75,13 +75,20 @@ void App::setGamma(double value)
     value = std::clamp(value, 0.1, 9.0);
     current_gamma_ = value;
 
-    if (gamma_.applyAll(value)) {
+    if (gamma_.applyAll(transfer_function_, value)) {
         size_t count = gamma_.getMonitorCount();
         std::snprintf(status_text_, sizeof(status_text_), "Applied to %zu display%s",
                       count, count == 1 ? "" : "s");
     } else {
         std::snprintf(status_text_, sizeof(status_text_), "Failed to apply gamma");
     }
+}
+
+void App::setTransferFunction(platform::TransferFunction func)
+{
+    transfer_function_ = func;
+    // Reapply current gamma with new transfer function
+    setGamma(current_gamma_);
 }
 
 void App::adjustGamma(double delta)
@@ -96,7 +103,7 @@ void App::resetGamma()
     if (gamma_.restoreAll()) {
         std::snprintf(status_text_, sizeof(status_text_), "Reset to original");
     } else {
-        gamma_.applyAll(1.0);
+        gamma_.applyAll(transfer_function_, 1.0);
         std::snprintf(status_text_, sizeof(status_text_), "Reset to default (1.0)");
     }
 }

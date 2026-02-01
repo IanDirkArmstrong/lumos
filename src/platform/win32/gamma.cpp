@@ -7,6 +7,34 @@
 
 namespace lumos::platform {
 
+// Transfer function implementations
+namespace {
+
+// sRGB transfer function (EOTF inverse - encoding)
+double sRGBTransfer(double linear) {
+    if (linear <= 0.0031308)
+        return 12.92 * linear;
+    return 1.055 * std::pow(linear, 1.0 / 2.4) - 0.055;
+}
+
+// Rec.709 / Rec.2020 transfer function
+double Rec709Transfer(double linear) {
+    const double beta = 0.018;
+    const double alpha = 1.099;
+    const double gamma = 0.45;
+
+    if (linear < beta)
+        return 4.5 * linear;
+    return alpha * std::pow(linear, gamma) - (alpha - 1.0);
+}
+
+// Pure power-law gamma
+double PowerTransfer(double linear, double gamma) {
+    return std::pow(linear, 1.0 / gamma);
+}
+
+} // anonymous namespace
+
 Gamma::~Gamma()
 {
     restoreAll();
@@ -87,17 +115,37 @@ bool Gamma::applyRamp(const MonitorInfo& monitor, const GammaRamp& ramp)
     return result != FALSE;
 }
 
-GammaRamp Gamma::buildRamp(double gamma)
+GammaRamp Gamma::buildRamp(TransferFunction func, double gamma)
 {
     if (gamma < 0.1) gamma = 0.1;
     if (gamma > 9.0) gamma = 9.0;
 
     GammaRamp ramp{};
     for (int i = 0; i < 256; ++i) {
-        double normalized = i / 255.0;
-        double corrected = std::pow(normalized, 1.0 / gamma);
-        WORD val = static_cast<WORD>(corrected * 65535.0);
+        double linear = i / 255.0;
+        double corrected;
 
+        switch (func) {
+            case TransferFunction::sRGB:
+                corrected = sRGBTransfer(linear);
+                break;
+
+            case TransferFunction::Rec709:
+            case TransferFunction::Rec2020:  // Same transfer function
+                corrected = Rec709Transfer(linear);
+                break;
+
+            case TransferFunction::DCIP3:
+                corrected = PowerTransfer(linear, 2.6);
+                break;
+
+            case TransferFunction::Power:
+            default:
+                corrected = PowerTransfer(linear, gamma);
+                break;
+        }
+
+        WORD val = static_cast<WORD>(corrected * 65535.0);
         ramp.red[i] = val;
         ramp.green[i] = val;
         ramp.blue[i] = val;
@@ -120,7 +168,12 @@ bool Gamma::restoreAll()
 
 bool Gamma::applyAll(double value)
 {
-    GammaRamp ramp = buildRamp(value);
+    return applyAll(TransferFunction::Power, value);
+}
+
+bool Gamma::applyAll(TransferFunction func, double value)
+{
+    GammaRamp ramp = buildRamp(func, value);
     bool success = true;
     for (const auto& monitor : monitors_) {
         if (!applyRamp(monitor, ramp)) {
@@ -132,9 +185,14 @@ bool Gamma::applyAll(double value)
 
 bool Gamma::apply(size_t monitor_index, double value)
 {
+    return apply(monitor_index, TransferFunction::Power, value);
+}
+
+bool Gamma::apply(size_t monitor_index, TransferFunction func, double value)
+{
     if (monitor_index >= monitors_.size()) return false;
 
-    GammaRamp ramp = buildRamp(value);
+    GammaRamp ramp = buildRamp(func, value);
     return applyRamp(monitors_[monitor_index], ramp);
 }
 

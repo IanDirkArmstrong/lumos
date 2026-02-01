@@ -32,6 +32,7 @@ private:
     void renderTestPatternWindow();
 
     float gamma_slider_ = 1.0f;
+    int transfer_function_index_ = 0;  // 0 = Power (default)
     bool first_frame_ = true;
 
     // Tab visibility

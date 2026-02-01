@@ -31,6 +31,9 @@ public:
     // Set gamma value (applies immediately to all monitors)
     void setGamma(double value);
 
+    // Set transfer function (applies immediately with current gamma)
+    void setTransferFunction(platform::TransferFunction func);
+
     // Adjust gamma by delta
     void adjustGamma(double delta);
 
@@ -39,6 +42,9 @@ public:
 
     // Get current gamma value
     double getGamma() const { return current_gamma_; }
+
+    // Get current transfer function
+    platform::TransferFunction getTransferFunction() const { return transfer_function_; }
 
     // Window visibility
     void showWindow();
@@ -80,6 +86,7 @@ private:
 
     HWND hwnd_ = nullptr;
     double current_gamma_ = 1.0;
+    platform::TransferFunction transfer_function_ = platform::TransferFunction::Power;
     bool window_visible_ = true;
     bool should_exit_ = false;
     char status_text_[64] = "Ready";
