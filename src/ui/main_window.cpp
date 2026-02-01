@@ -107,22 +107,30 @@ void MainWindow::renderGammaTab(App& app)
     ImGui::Spacing();
 
     // Gamma slider
-    ImGui::TextUnformatted("Gamma (absolute value)");
+    ImGui::TextUnformatted("Gamma");
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Absolute gamma value (not relative)");
+    }
     ImGui::SetNextItemWidth(-1);
     bool slider_changed = ImGui::SliderFloat("##Gamma", &gamma_slider_, 0.1f, 9.0f, "%.2f");
 
     // Snap to common values when close (sticky tick marks)
-    if (slider_changed && !ImGui::IsMouseDown(0)) {  // Only snap after mouse release
+    static bool was_dragging = false;
+    bool is_dragging = ImGui::IsItemActive();
+
+    if (was_dragging && !is_dragging) {  // Just released the slider
         const float tick_values[] = { 1.0f, 1.8f, 2.2f, 2.5f };
         const float snap_threshold = 0.05f;  // Snap within ±0.05
 
         for (float tick_val : tick_values) {
-            if (std::abs(gamma_slider_ - tick_val) < snap_threshold) {
+            if (std::fabs(gamma_slider_ - tick_val) < snap_threshold) {
                 gamma_slider_ = tick_val;
+                slider_changed = true;  // Ensure we apply the snapped value
                 break;
             }
         }
     }
+    was_dragging = is_dragging;
 
     if (slider_changed) {
         app.setGamma(static_cast<double>(gamma_slider_));
@@ -172,7 +180,7 @@ void MainWindow::renderGammaTab(App& app)
     ImGui::TextUnformatted("Precise Value:");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(100.0f);
-    if (ImGui::InputFloat("##GammaInput", &gamma_slider_, 0.0f, 0.0f, "%.2f", ImGuiInputTextFlags_EnterReturnsTrue)) {
+    if (ImGui::InputFloat("##GammaInput", &gamma_slider_, 0.0f, 0.0f, "%.2f")) {
         // Clamp to valid range
         if (gamma_slider_ < 0.1f) gamma_slider_ = 0.1f;
         if (gamma_slider_ > 9.0f) gamma_slider_ = 9.0f;
