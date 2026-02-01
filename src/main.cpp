@@ -109,7 +109,7 @@ int WINAPI WinMain(
         0,
         wc.lpszClassName,
         L"Lumos",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_THICKFRAME | WS_MAXIMIZEBOX,
         CW_USEDEFAULT, CW_USEDEFAULT,
         500, 300,
         nullptr, nullptr, hInstance, nullptr);
