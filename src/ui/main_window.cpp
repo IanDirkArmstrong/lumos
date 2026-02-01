@@ -41,14 +41,14 @@ void MainWindow::render(App& app)
     // Render tab bar
     if (ImGui::BeginTabBar("MainTabBar", ImGuiTabBarFlags_None)) {
         // Gamma control tab (always visible, not closable)
-        if (ImGui::BeginTabItem("\xE2\x9A\x99 Gamma")) {  // ⚙ Gamma
+        if (ImGui::BeginTabItem("Gamma")) {
             renderGammaTab(app);
             ImGui::EndTabItem();
         }
 
         // Help tab (closable)
         if (show_help_tab_) {
-            if (ImGui::BeginTabItem("\xE2\x9D\x93 Help", &show_help_tab_)) {  // ❓ Help
+            if (ImGui::BeginTabItem("Help", &show_help_tab_)) {
                 renderHelpTab();
                 ImGui::EndTabItem();
             }
@@ -56,16 +56,8 @@ void MainWindow::render(App& app)
 
         // About tab (closable)
         if (show_about_tab_) {
-            if (ImGui::BeginTabItem("\xE2\x84\xB9 About", &show_about_tab_)) {  // ℹ About
+            if (ImGui::BeginTabItem("About", &show_about_tab_)) {
                 renderAboutTab();
-                ImGui::EndTabItem();
-            }
-        }
-
-        // Test Pattern tab (closable)
-        if (show_test_pattern_tab_) {
-            if (ImGui::BeginTabItem("\xE2\x96\xA6 Pattern", &show_test_pattern_tab_)) {  // ▦ Pattern
-                renderTestPatternTab();
                 ImGui::EndTabItem();
             }
         }
@@ -74,6 +66,11 @@ void MainWindow::render(App& app)
     }
 
     ImGui::End();
+
+    // Render test pattern as a separate window (so it can be viewed while adjusting gamma)
+    if (show_test_pattern_window_) {
+        renderTestPatternWindow();
+    }
 }
 
 void MainWindow::renderMenuBar()
@@ -96,7 +93,7 @@ void MainWindow::renderMenuBar()
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Test Pattern")) {
-                show_test_pattern_tab_ = true;
+                show_test_pattern_window_ = true;
             }
             ImGui::EndMenu();
         }
@@ -110,9 +107,24 @@ void MainWindow::renderGammaTab(App& app)
     ImGui::Spacing();
 
     // Gamma slider
-    ImGui::TextUnformatted("Gamma");
+    ImGui::TextUnformatted("Gamma (absolute value)");
     ImGui::SetNextItemWidth(-1);
-    if (ImGui::SliderFloat("##Gamma", &gamma_slider_, 0.1f, 9.0f, "%.2f")) {
+    bool slider_changed = ImGui::SliderFloat("##Gamma", &gamma_slider_, 0.1f, 9.0f, "%.2f");
+
+    // Snap to common values when close (sticky tick marks)
+    if (slider_changed && !ImGui::IsMouseDown(0)) {  // Only snap after mouse release
+        const float tick_values[] = { 1.0f, 1.8f, 2.2f, 2.5f };
+        const float snap_threshold = 0.05f;  // Snap within ±0.05
+
+        for (float tick_val : tick_values) {
+            if (std::abs(gamma_slider_ - tick_val) < snap_threshold) {
+                gamma_slider_ = tick_val;
+                break;
+            }
+        }
+    }
+
+    if (slider_changed) {
         app.setGamma(static_cast<double>(gamma_slider_));
     }
 
@@ -156,8 +168,18 @@ void MainWindow::renderGammaTab(App& app)
 
     ImGui::Spacing();
 
-    // Current value display
-    ImGui::Text("Current: %.2f", gamma_slider_);
+    // Numeric input for precise control
+    ImGui::TextUnformatted("Precise Value:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(100.0f);
+    if (ImGui::InputFloat("##GammaInput", &gamma_slider_, 0.0f, 0.0f, "%.2f", ImGuiInputTextFlags_EnterReturnsTrue)) {
+        // Clamp to valid range
+        if (gamma_slider_ < 0.1f) gamma_slider_ = 0.1f;
+        if (gamma_slider_ > 9.0f) gamma_slider_ = 9.0f;
+        app.setGamma(static_cast<double>(gamma_slider_));
+    }
+
+    ImGui::Spacing();
 
     // Gamma curve visualization
     ImGui::Spacing();
@@ -309,47 +331,54 @@ void MainWindow::renderAboutTab()
     ImGui::TextDisabled("under the terms of the GNU General Public License.");
 }
 
-void MainWindow::renderTestPatternTab()
+void MainWindow::renderTestPatternWindow()
 {
-    ImGui::Spacing();
+    ImGui::SetNextWindowSize(ImVec2(600, 400), ImGuiCond_FirstUseEver);
 
-    ImGui::TextWrapped(
-        "This pattern helps calibrate your display. "
-        "Adjust gamma until the gray areas appear uniform in brightness.");
+    if (ImGui::Begin("Test Pattern", &show_test_pattern_window_, ImGuiWindowFlags_None)) {
+        ImGui::TextWrapped(
+            "This pattern helps calibrate your display. "
+            "Keep this window open while adjusting the gamma slider.");
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
+            "Note: This window is gamma-corrected by your current settings.");
+        ImGui::TextWrapped(
+            "The stripes should appear to blend into uniform gray at the correct gamma. "
+            "If they appear banded or one color dominates, adjust the gamma.");
 
-    // Draw striped test pattern
-    const float pattern_height = 180.0f;
-    ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
-    ImVec2 canvas_size = ImVec2(ImGui::GetContentRegionAvail().x, pattern_height);
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
 
-    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+        // Draw striped test pattern
+        const float pattern_height = ImGui::GetContentRegionAvail().y - 20.0f;
+        ImVec2 canvas_pos = ImGui::GetCursorScreenPos();
+        ImVec2 canvas_size = ImVec2(ImGui::GetContentRegionAvail().x, pattern_height);
 
-    // Number of stripe pairs
-    const int num_stripes = 16;
-    const float stripe_width = canvas_size.x / num_stripes;
+        ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
-    for (int i = 0; i < num_stripes; ++i) {
-        float x = canvas_pos.x + i * stripe_width;
-        ImU32 color = (i % 2 == 0) ? IM_COL32(0, 0, 0, 255) : IM_COL32(255, 255, 255, 255);
-        draw_list->AddRectFilled(
-            ImVec2(x, canvas_pos.y),
-            ImVec2(x + stripe_width, canvas_pos.y + canvas_size.y),
-            color);
+        // Number of stripe pairs - more stripes for better blending test
+        const int num_stripes = 32;
+        const float stripe_width = canvas_size.x / num_stripes;
+
+        for (int i = 0; i < num_stripes; ++i) {
+            float x = canvas_pos.x + i * stripe_width;
+            ImU32 color = (i % 2 == 0) ? IM_COL32(0, 0, 0, 255) : IM_COL32(255, 255, 255, 255);
+            draw_list->AddRectFilled(
+                ImVec2(x, canvas_pos.y),
+                ImVec2(x + stripe_width, canvas_pos.y + canvas_size.y),
+                color);
+        }
+
+        // Border
+        draw_list->AddRect(canvas_pos,
+            ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
+            IM_COL32(100, 100, 100, 255));
+
+        ImGui::Dummy(canvas_size);
     }
-
-    // Border
-    draw_list->AddRect(canvas_pos,
-        ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-        IM_COL32(100, 100, 100, 255));
-
-    ImGui::Dummy(canvas_size);
-
-    ImGui::Spacing();
-    ImGui::TextDisabled("At correct gamma, alternating stripes should appear evenly bright.");
+    ImGui::End();
 }
 
 } // namespace lumos::ui

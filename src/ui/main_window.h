@@ -20,14 +20,16 @@ public:
     // Open tabs
     void openHelp() { show_help_tab_ = true; }
     void openAbout() { show_about_tab_ = true; }
-    void openTestPattern() { show_test_pattern_tab_ = true; }
+
+    // Open windows
+    void openTestPattern() { show_test_pattern_window_ = true; }
 
 private:
     void renderMenuBar();
     void renderGammaTab(App& app);
     void renderHelpTab();
     void renderAboutTab();
-    void renderTestPatternTab();
+    void renderTestPatternWindow();
 
     float gamma_slider_ = 1.0f;
     bool first_frame_ = true;
@@ -35,7 +37,9 @@ private:
     // Tab visibility
     bool show_help_tab_ = false;
     bool show_about_tab_ = false;
-    bool show_test_pattern_tab_ = false;
+
+    // Separate window visibility
+    bool show_test_pattern_window_ = false;
 };
 
 } // namespace lumos::ui
