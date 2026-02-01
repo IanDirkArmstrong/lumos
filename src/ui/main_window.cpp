@@ -267,13 +267,23 @@ void MainWindow::renderHelpTab()
     ImGui::TextDisabled("lumos 1.2          Set gamma to 1.2 and exit");
     ImGui::TextDisabled("lumos --help       Show help");
     ImGui::TextDisabled("lumos --version    Show version");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::TextUnformatted("Visualization Tools");
+    ImGui::Spacing();
+    ImGui::BulletText("Gamma Curve: Real-time visualization of gamma correction");
+    ImGui::BulletText("Tick Marks: Common gamma values marked on slider");
+    ImGui::BulletText("Test Pattern: B&W stripes for calibration (Help menu)");
 }
 
 void MainWindow::renderAboutTab()
 {
     ImGui::Spacing();
 
-    ImGui::TextUnformatted("Lumos v0.2.0");
+    ImGui::TextUnformatted("Lumos v0.3.0");
     ImGui::Separator();
     ImGui::Spacing();
 
