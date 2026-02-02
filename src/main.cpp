@@ -111,7 +111,7 @@ int WINAPI WinMain(
         L"Lumos",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_THICKFRAME | WS_MAXIMIZEBOX,
         CW_USEDEFAULT, CW_USEDEFAULT,
-        500, 300,
+        700, 550,  // Larger window for custom curve editor
         nullptr, nullptr, hInstance, nullptr);
 
     if (!CreateDeviceD3D(hwnd))

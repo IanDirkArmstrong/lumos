@@ -46,6 +46,10 @@ public:
     // Get current transfer function
     platform::TransferFunction getTransferFunction() const { return transfer_function_; }
 
+    // Custom curve management
+    const std::vector<platform::CurvePoint>& getCustomCurvePoints() const { return custom_curve_points_; }
+    void setCustomCurvePoints(const std::vector<platform::CurvePoint>& points);
+
     // Window visibility
     void showWindow();
     void hideWindow();
@@ -87,6 +91,7 @@ private:
     HWND hwnd_ = nullptr;
     double current_gamma_ = 1.0;
     platform::TransferFunction transfer_function_ = platform::TransferFunction::Power;
+    std::vector<platform::CurvePoint> custom_curve_points_;
     bool window_visible_ = true;
     bool should_exit_ = false;
     char status_text_[64] = "Ready";

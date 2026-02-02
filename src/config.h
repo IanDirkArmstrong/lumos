@@ -5,7 +5,9 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <filesystem>
+#include "platform/win32/gamma.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -32,6 +34,8 @@ public:
 
     // Settings
     double last_gamma = 1.0;
+    std::string transfer_function = "Power";
+    std::vector<platform::CurvePoint> custom_curve_points;
 
     // Hotkey bindings
     HotkeyBinding hotkey_increase = { MOD_CONTROL | MOD_ALT, VK_UP };

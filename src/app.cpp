@@ -8,6 +8,31 @@
 
 namespace lumos {
 
+namespace {
+// Helper function to convert string to TransferFunction enum
+platform::TransferFunction stringToTransferFunction(const std::string& str) {
+    if (str == "sRGB") return platform::TransferFunction::sRGB;
+    if (str == "Rec709") return platform::TransferFunction::Rec709;
+    if (str == "Rec2020") return platform::TransferFunction::Rec2020;
+    if (str == "DCIP3") return platform::TransferFunction::DCIP3;
+    if (str == "Custom") return platform::TransferFunction::Custom;
+    return platform::TransferFunction::Power;  // default
+}
+
+// Helper function to convert TransferFunction enum to string
+std::string transferFunctionToString(platform::TransferFunction func) {
+    switch (func) {
+        case platform::TransferFunction::sRGB: return "sRGB";
+        case platform::TransferFunction::Rec709: return "Rec709";
+        case platform::TransferFunction::Rec2020: return "Rec2020";
+        case platform::TransferFunction::DCIP3: return "DCIP3";
+        case platform::TransferFunction::Custom: return "Custom";
+        case platform::TransferFunction::Power:
+        default: return "Power";
+    }
+}
+} // anonymous namespace
+
 bool App::initialize(HWND hwnd, UINT tray_msg)
 {
     hwnd_ = hwnd;
@@ -15,6 +40,13 @@ bool App::initialize(HWND hwnd, UINT tray_msg)
     // Load config
     config_.load();
     current_gamma_ = config_.last_gamma;
+    transfer_function_ = stringToTransferFunction(config_.transfer_function);
+    custom_curve_points_ = config_.custom_curve_points;
+
+    // Ensure custom curve has valid default if empty
+    if (custom_curve_points_.empty()) {
+        custom_curve_points_ = {{0.0, 0.0}, {1.0, 1.0}};  // Linear default
+    }
 
     // Initialize gamma (captures original ramps for all monitors)
     if (!gamma_.initialize()) {
@@ -22,8 +54,12 @@ bool App::initialize(HWND hwnd, UINT tray_msg)
     }
 
     // Apply saved gamma to all monitors
-    if (current_gamma_ != 1.0) {
-        gamma_.applyAll(transfer_function_, current_gamma_);
+    if (current_gamma_ != 1.0 || transfer_function_ != platform::TransferFunction::Power) {
+        if (transfer_function_ == platform::TransferFunction::Custom) {
+            gamma_.applyAll(transfer_function_, current_gamma_, &custom_curve_points_);
+        } else {
+            gamma_.applyAll(transfer_function_, current_gamma_);
+        }
     }
 
     // Create tray icon
@@ -61,6 +97,8 @@ void App::shutdown()
 
     // Save config
     config_.last_gamma = current_gamma_;
+    config_.transfer_function = transferFunctionToString(transfer_function_);
+    config_.custom_curve_points = custom_curve_points_;
     config_.save();
 
     // Restore original gamma on all monitors
@@ -75,7 +113,14 @@ void App::setGamma(double value)
     value = std::clamp(value, 0.1, 9.0);
     current_gamma_ = value;
 
-    if (gamma_.applyAll(transfer_function_, value)) {
+    bool success;
+    if (transfer_function_ == platform::TransferFunction::Custom) {
+        success = gamma_.applyAll(transfer_function_, value, &custom_curve_points_);
+    } else {
+        success = gamma_.applyAll(transfer_function_, value);
+    }
+
+    if (success) {
         size_t count = gamma_.getMonitorCount();
         std::snprintf(status_text_, sizeof(status_text_), "Applied to %zu display%s",
                       count, count == 1 ? "" : "s");
@@ -103,8 +148,22 @@ void App::resetGamma()
     if (gamma_.restoreAll()) {
         std::snprintf(status_text_, sizeof(status_text_), "Reset to original");
     } else {
-        gamma_.applyAll(transfer_function_, 1.0);
+        if (transfer_function_ == platform::TransferFunction::Custom) {
+            gamma_.applyAll(transfer_function_, 1.0, &custom_curve_points_);
+        } else {
+            gamma_.applyAll(transfer_function_, 1.0);
+        }
         std::snprintf(status_text_, sizeof(status_text_), "Reset to default (1.0)");
+    }
+}
+
+void App::setCustomCurvePoints(const std::vector<platform::CurvePoint>& points)
+{
+    custom_curve_points_ = points;
+
+    // If we're currently in Custom mode, reapply immediately
+    if (transfer_function_ == platform::TransferFunction::Custom) {
+        setGamma(current_gamma_);
     }
 }
 

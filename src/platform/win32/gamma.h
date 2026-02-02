@@ -15,6 +15,15 @@
 
 namespace lumos::platform {
 
+// Custom curve control point
+struct CurvePoint {
+    double x;  // Input (0.0 - 1.0)
+    double y;  // Output (0.0 - 1.0)
+
+    // For sorting by x-coordinate
+    bool operator<(const CurvePoint& other) const { return x < other.x; }
+};
+
 // Transfer function types for gamma correction
 enum class TransferFunction {
     Power,      // Pure power-law gamma (traditional)
@@ -22,6 +31,7 @@ enum class TransferFunction {
     Rec709,     // Rec.709 / Rec.2020 (broadcast standard)
     Rec2020,    // Rec.2020 (alias for Rec709, same transfer)
     DCIP3,      // DCI-P3 (pure gamma 2.6)
+    Custom,     // User-defined curve with control points
 };
 
 struct GammaRamp {
@@ -52,11 +62,13 @@ public:
 
     // Apply gamma value to all monitors
     bool applyAll(double value);
-    bool applyAll(TransferFunction func, double value);
+    bool applyAll(TransferFunction func, double value,
+                  const std::vector<CurvePoint>* custom_curve = nullptr);
 
     // Apply gamma value to specific monitor
     bool apply(size_t monitor_index, double value);
-    bool apply(size_t monitor_index, TransferFunction func, double value);
+    bool apply(size_t monitor_index, TransferFunction func, double value,
+               const std::vector<CurvePoint>* custom_curve = nullptr);
 
     // Restore specific monitor
     bool restore(size_t monitor_index);
@@ -85,7 +97,8 @@ private:
 
     bool captureRamp(MonitorInfo& monitor);
     bool applyRamp(const MonitorInfo& monitor, const GammaRamp& ramp);
-    static GammaRamp buildRamp(TransferFunction func, double gamma);
+    static GammaRamp buildRamp(TransferFunction func, double gamma,
+                               const std::vector<CurvePoint>* custom_curve = nullptr);
 };
 
 } // namespace lumos::platform

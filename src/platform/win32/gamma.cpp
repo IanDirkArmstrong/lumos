@@ -115,7 +115,8 @@ bool Gamma::applyRamp(const MonitorInfo& monitor, const GammaRamp& ramp)
     return result != FALSE;
 }
 
-GammaRamp Gamma::buildRamp(TransferFunction func, double gamma)
+GammaRamp Gamma::buildRamp(TransferFunction func, double gamma,
+                           const std::vector<CurvePoint>* custom_curve)
 {
     if (gamma < 0.1) gamma = 0.1;
     if (gamma > 9.0) gamma = 9.0;
@@ -139,11 +140,52 @@ GammaRamp Gamma::buildRamp(TransferFunction func, double gamma)
                 corrected = PowerTransfer(linear, 2.6);
                 break;
 
+            case TransferFunction::Custom:
+                if (custom_curve && custom_curve->size() >= 2) {
+                    // Linear interpolation between control points
+                    const auto& points = *custom_curve;
+
+                    // Find surrounding points
+                    if (linear <= points.front().x) {
+                        // Before first point
+                        corrected = points.front().y;
+                    }
+                    else if (linear >= points.back().x) {
+                        // After last point
+                        corrected = points.back().y;
+                    }
+                    else {
+                        // Interpolate between two points
+                        for (size_t j = 0; j < points.size() - 1; ++j) {
+                            if (linear >= points[j].x && linear <= points[j + 1].x) {
+                                double x1 = points[j].x;
+                                double y1 = points[j].y;
+                                double x2 = points[j + 1].x;
+                                double y2 = points[j + 1].y;
+
+                                // Linear interpolation
+                                double t = (linear - x1) / (x2 - x1);
+                                corrected = y1 + t * (y2 - y1);
+                                break;
+                            }
+                        }
+                    }
+                }
+                else {
+                    // Fallback to linear (identity) if no valid curve
+                    corrected = linear;
+                }
+                break;
+
             case TransferFunction::Power:
             default:
                 corrected = PowerTransfer(linear, gamma);
                 break;
         }
+
+        // Clamp to valid range
+        if (corrected < 0.0) corrected = 0.0;
+        if (corrected > 1.0) corrected = 1.0;
 
         WORD val = static_cast<WORD>(corrected * 65535.0);
         ramp.red[i] = val;
@@ -168,12 +210,13 @@ bool Gamma::restoreAll()
 
 bool Gamma::applyAll(double value)
 {
-    return applyAll(TransferFunction::Power, value);
+    return applyAll(TransferFunction::Power, value, nullptr);
 }
 
-bool Gamma::applyAll(TransferFunction func, double value)
+bool Gamma::applyAll(TransferFunction func, double value,
+                     const std::vector<CurvePoint>* custom_curve)
 {
-    GammaRamp ramp = buildRamp(func, value);
+    GammaRamp ramp = buildRamp(func, value, custom_curve);
     bool success = true;
     for (const auto& monitor : monitors_) {
         if (!applyRamp(monitor, ramp)) {
@@ -185,14 +228,15 @@ bool Gamma::applyAll(TransferFunction func, double value)
 
 bool Gamma::apply(size_t monitor_index, double value)
 {
-    return apply(monitor_index, TransferFunction::Power, value);
+    return apply(monitor_index, TransferFunction::Power, value, nullptr);
 }
 
-bool Gamma::apply(size_t monitor_index, TransferFunction func, double value)
+bool Gamma::apply(size_t monitor_index, TransferFunction func, double value,
+                  const std::vector<CurvePoint>* custom_curve)
 {
     if (monitor_index >= monitors_.size()) return false;
 
-    GammaRamp ramp = buildRamp(func, value);
+    GammaRamp ramp = buildRamp(func, value, custom_curve);
     return applyRamp(monitors_[monitor_index], ramp);
 }
 
