@@ -106,7 +106,7 @@ bool Gamma::captureRamp(MonitorInfo& monitor)
     return result != FALSE;
 }
 
-bool Gamma::applyRamp(const MonitorInfo& monitor, const GammaRamp& ramp)
+bool Gamma::setRamp(const MonitorInfo& monitor, const GammaRamp& ramp)
 {
     HDC hdc = CreateDCW(L"DISPLAY", monitor.device_name.c_str(), nullptr, nullptr);
     if (!hdc) return false;
@@ -117,6 +117,157 @@ bool Gamma::applyRamp(const MonitorInfo& monitor, const GammaRamp& ramp)
     DeleteDC(hdc);
 
     return result != FALSE;
+}
+
+bool Gamma::readRamp(const MonitorInfo& monitor, GammaRamp& out_ramp) const
+{
+    HDC hdc = CreateDCW(L"DISPLAY", monitor.device_name.c_str(), nullptr, nullptr);
+    if (!hdc) return false;
+
+    // GetDeviceGammaRamp expects WORD[3][256], which matches our GammaRamp layout
+    BOOL result = GetDeviceGammaRamp(hdc, &out_ramp);
+    DeleteDC(hdc);
+
+    return result != FALSE;
+}
+
+bool Gamma::verifyRamp(const MonitorInfo& monitor, const GammaRamp& expected)
+{
+    GammaRamp actual{};
+    if (!readRamp(monitor, actual)) {
+        return false;
+    }
+
+    // Compare with tolerance. SetDeviceGammaRamp can round values slightly,
+    // so we allow a small epsilon. If the ramp was silently rejected, the
+    // actual values will be very different (often the previous ramp).
+    constexpr int kMaxDiff = 512;  // ~0.8% of 65535, allows for rounding
+
+    for (int i = 0; i < 256; ++i) {
+        int diff_r = std::abs(static_cast<int>(expected.red[i]) - static_cast<int>(actual.red[i]));
+        int diff_g = std::abs(static_cast<int>(expected.green[i]) - static_cast<int>(actual.green[i]));
+        int diff_b = std::abs(static_cast<int>(expected.blue[i]) - static_cast<int>(actual.blue[i]));
+
+        if (diff_r > kMaxDiff || diff_g > kMaxDiff || diff_b > kMaxDiff) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+GammaRamp Gamma::buildIdentityRamp()
+{
+    GammaRamp ramp{};
+    for (int i = 0; i < 256; ++i) {
+        WORD val = static_cast<WORD>(i * 257);  // Maps 0-255 to 0-65535
+        ramp.red[i] = val;
+        ramp.green[i] = val;
+        ramp.blue[i] = val;
+    }
+    return ramp;
+}
+
+GammaRamp Gamma::blendRampTowardIdentity(const GammaRamp& ramp,
+                                          const GammaRamp& identity,
+                                          double scale)
+{
+    GammaRamp result{};
+    for (int i = 0; i < 256; ++i) {
+        // Blend: identity + scale * (ramp - identity)
+        // When scale=1.0, result=ramp. When scale=0.0, result=identity.
+        double r = identity.red[i] + scale * (static_cast<double>(ramp.red[i]) - identity.red[i]);
+        double g = identity.green[i] + scale * (static_cast<double>(ramp.green[i]) - identity.green[i]);
+        double b = identity.blue[i] + scale * (static_cast<double>(ramp.blue[i]) - identity.blue[i]);
+
+        result.red[i] = static_cast<WORD>(std::clamp(r, 0.0, 65535.0));
+        result.green[i] = static_cast<WORD>(std::clamp(g, 0.0, 65535.0));
+        result.blue[i] = static_cast<WORD>(std::clamp(b, 0.0, 65535.0));
+    }
+    return result;
+}
+
+void Gamma::enforceMonotonicity(GammaRamp& ramp)
+{
+    // Ensure ramp values are strictly increasing (or at least non-decreasing).
+    // Windows heuristics reject ramps with flat or decreasing segments.
+    // We enforce a minimum step of 1 to keep it strictly increasing.
+    constexpr WORD kMinStep = 1;
+
+    auto enforce_channel = [](std::array<WORD, 256>& channel) {
+        WORD prev = 0;
+        for (int i = 0; i < 256; ++i) {
+            if (channel[i] <= prev && i > 0) {
+                channel[i] = (prev < 65535 - kMinStep) ? prev + kMinStep : 65535;
+            }
+            prev = channel[i];
+        }
+    };
+
+    enforce_channel(ramp.red);
+    enforce_channel(ramp.green);
+    enforce_channel(ramp.blue);
+}
+
+bool Gamma::applyRampAdaptive(MonitorInfo& monitor, const GammaRamp& ideal)
+{
+    static const GammaRamp identity = buildIdentityRamp();
+
+    // Start with the monitor's cached safe scale, slightly expanded to probe
+    // whether we can use more range now
+    double scale = (std::min)(1.0, monitor.safe_scale * 1.05);
+
+    // Binary search bounds
+    double low = 0.0;
+    double high = scale;
+
+    constexpr int kMaxAttempts = 6;
+    GammaRamp last_good = identity;
+    bool any_success = false;
+
+    for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
+        double try_scale = (attempt == 0) ? high : 0.5 * (low + high);
+
+        GammaRamp blended = blendRampTowardIdentity(ideal, identity, try_scale);
+        enforceMonotonicity(blended);
+
+        if (!setRamp(monitor, blended)) {
+            // Hard failure (API returned FALSE) - shrink range
+            high = try_scale;
+            continue;
+        }
+
+        // SetDeviceGammaRamp returned TRUE, but it might have silently rejected
+        if (verifyRamp(monitor, blended)) {
+            // Success! Remember this scale and try to expand
+            low = try_scale;
+            last_good = blended;
+            any_success = true;
+            monitor.safe_scale = try_scale;
+
+            // If we're close enough to our target scale, stop
+            if (high - low < 0.02) {
+                break;
+            }
+        } else {
+            // Silent rejection - shrink range
+            high = try_scale;
+        }
+    }
+
+    // Apply the best ramp we found
+    if (any_success) {
+        // If our last attempt wasn't the good one, re-apply
+        if (high != low) {
+            setRamp(monitor, last_good);
+        }
+        return true;
+    }
+
+    // Complete failure - fall back to identity
+    setRamp(monitor, identity);
+    monitor.safe_scale = 0.1;  // Very conservative for next attempt
+    return false;
 }
 
 GammaRamp Gamma::buildRamp(ToneCurve curve, double strength,
@@ -191,15 +342,20 @@ GammaRamp Gamma::buildRamp(ToneCurve curve, double strength,
                 break;
         }
 
-        // Clamp to valid range
+        // Clamp to valid range [0, 1]
+        // Note: We use expanded bounds here. The adaptive application layer
+        // (applyRampAdaptive) will scale back toward identity if Windows
+        // rejects the ramp. This allows us to request aggressive curves and
+        // get the maximum the driver will accept.
         if (corrected < 0.0) corrected = 0.0;
         if (corrected > 1.0) corrected = 1.0;
 
-        // Windows SetDeviceGammaRamp restricts values to roughly 50-150% of identity.
-        // Clamp output to prevent API failures (min ~half identity, max ~1.5x identity)
-        double identity = linear;
-        double min_allowed = identity * 0.5;
-        double max_allowed = (std::min)(1.0, identity * 1.5 + 0.05);  // +0.05 for headroom at low values
+        // Optional soft bounds: keep values within a generous envelope around
+        // identity to increase likelihood of acceptance.
+        // Allow crushing blacks (min=0) and generous shadow lift (offset 0.2)
+        double identity_val = linear;
+        double min_allowed = 0.0;
+        double max_allowed = (std::min)(1.0, identity_val * 3.0 + 0.2);
         if (corrected < min_allowed) corrected = min_allowed;
         if (corrected > max_allowed) corrected = max_allowed;
 
@@ -208,6 +364,10 @@ GammaRamp Gamma::buildRamp(ToneCurve curve, double strength,
         ramp.green[i] = val;
         ramp.blue[i] = val;
     }
+
+    // Enforce monotonicity to help pass Windows heuristics
+    enforceMonotonicity(ramp);
+
     return ramp;
 }
 
@@ -216,7 +376,8 @@ bool Gamma::restoreAll()
     bool success = true;
     for (const auto& monitor : monitors_) {
         if (monitor.has_original) {
-            if (!applyRamp(monitor, monitor.original_ramp)) {
+            // Use direct setRamp for restore - original ramps should always be valid
+            if (!setRamp(monitor, monitor.original_ramp)) {
                 success = false;
             }
         }
@@ -234,8 +395,8 @@ bool Gamma::applyAll(ToneCurve curve, double strength,
 {
     GammaRamp ramp = buildRamp(curve, strength, custom_curve);
     bool success = true;
-    for (const auto& monitor : monitors_) {
-        if (!applyRamp(monitor, ramp)) {
+    for (auto& monitor : monitors_) {
+        if (!applyRampAdaptive(monitor, ramp)) {
             success = false;
         }
     }
@@ -253,7 +414,7 @@ bool Gamma::apply(size_t monitor_index, ToneCurve curve, double strength,
     if (monitor_index >= monitors_.size()) return false;
 
     GammaRamp ramp = buildRamp(curve, strength, custom_curve);
-    return applyRamp(monitors_[monitor_index], ramp);
+    return applyRampAdaptive(monitors_[monitor_index], ramp);
 }
 
 bool Gamma::restore(size_t monitor_index)
@@ -263,7 +424,8 @@ bool Gamma::restore(size_t monitor_index)
     const auto& monitor = monitors_[monitor_index];
     if (!monitor.has_original) return false;
 
-    return applyRamp(monitor, monitor.original_ramp);
+    // Use direct setRamp for restore - original ramps should always be valid
+    return setRamp(monitor, monitor.original_ramp);
 }
 
 const MonitorInfo* Gamma::getMonitor(size_t index) const

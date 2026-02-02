@@ -801,7 +801,9 @@ void MainWindow::renderGammaTab(App& app)
         ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
         IM_COL32(80, 80, 80, 255), 1.5f);
 
-    // Draw Windows API valid zone (50-150% of identity) - only in Custom mode
+    // Draw Windows API valid zone (expanded 15-300% of identity) - only in Custom mode
+    // Note: The actual limits are enforced adaptively by the gamma driver layer.
+    // This visualization shows the "likely to succeed" zone.
     if (is_custom_mode) {
         // Build polygon for the valid zone
         std::vector<ImVec2> valid_zone_top;
@@ -809,8 +811,9 @@ void MainWindow::renderGammaTab(App& app)
 
         for (int i = 0; i <= 64; ++i) {
             double x_norm = i / 64.0;
-            double min_y = x_norm * 0.5;
-            double max_y = (std::min)(1.0, x_norm * 1.5 + 0.05);
+            // Allow crushing blacks (min=0) and generous shadow lift (offset 0.2)
+            double min_y = 0.0;
+            double max_y = (std::min)(1.0, x_norm * 3.0 + 0.2);
 
             float px = canvas_pos.x + static_cast<float>(x_norm) * canvas_size.x;
             float py_min = canvas_pos.y + canvas_size.y - static_cast<float>(min_y) * canvas_size.y;
@@ -1035,9 +1038,11 @@ void MainWindow::renderGammaTab(App& app)
                     }
                 }
 
-                // Constrain Y to Windows API valid zone (50-150% of identity)
-                double min_y = new_x * 0.5;
-                double max_y = (std::min)(1.0, new_x * 1.5 + 0.05);
+                // Constrain Y to expanded valid zone
+                // Allow crushing blacks (min=0) and generous shadow lift (offset 0.2)
+                // The adaptive gamma layer will scale back if Windows rejects the ramp
+                double min_y = 0.0;
+                double max_y = (std::min)(1.0, new_x * 3.0 + 0.2);
                 new_y = std::clamp(new_y, min_y, max_y);
 
                 ui_curve_points_[selected_point_index_].x = new_x;
@@ -1095,9 +1100,11 @@ void MainWindow::renderGammaTab(App& app)
                     new_x = std::clamp(new_x, 0.0, 1.0);
                     new_y = std::clamp(new_y, 0.0, 1.0);
 
-                    // Constrain Y to Windows API valid zone (50-150% of identity)
-                    double min_y = new_x * 0.5;
-                    double max_y = (std::min)(1.0, new_x * 1.5 + 0.05);
+                    // Constrain Y to expanded valid zone
+                    // Allow crushing blacks (min=0) and generous shadow lift (offset 0.2)
+                    // The adaptive gamma layer will scale back if Windows rejects the ramp
+                    double min_y = 0.0;
+                    double max_y = (std::min)(1.0, new_x * 3.0 + 0.2);
                     new_y = std::clamp(new_y, min_y, max_y);
 
                     ui_curve_points_.push_back({new_x, new_y});

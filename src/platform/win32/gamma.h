@@ -53,6 +53,12 @@ struct MonitorInfo {
     bool is_primary;
     GammaRamp original_ramp;
     bool has_original;
+
+    // Adaptive ramp scaling: cached "safe" scale factor for this monitor.
+    // When applying ramps that push boundaries, we scale deviation from
+    // identity by this factor. Starts at 1.0 (full strength) and shrinks
+    // if Windows rejects the ramp. Grows slowly after successes.
+    double safe_scale = 1.0;
 };
 
 class Gamma {
@@ -102,7 +108,31 @@ private:
                                           LPRECT lprcMonitor, LPARAM dwData);
 
     bool captureRamp(MonitorInfo& monitor);
-    bool applyRamp(const MonitorInfo& monitor, const GammaRamp& ramp);
+
+    // Low-level ramp application (no verification)
+    bool setRamp(const MonitorInfo& monitor, const GammaRamp& ramp);
+
+    // Read current ramp from monitor
+    bool readRamp(const MonitorInfo& monitor, GammaRamp& out_ramp) const;
+
+    // Verify that a ramp was actually applied (SetDeviceGammaRamp can fail silently)
+    bool verifyRamp(const MonitorInfo& monitor, const GammaRamp& expected);
+
+    // Apply ramp with adaptive fallback: if Windows rejects it, blend toward
+    // identity and retry. Updates monitor.safe_scale on success/failure.
+    bool applyRampAdaptive(MonitorInfo& monitor, const GammaRamp& ideal);
+
+    // Build identity ramp (linear 1:1 mapping)
+    static GammaRamp buildIdentityRamp();
+
+    // Blend ramp toward identity by factor s (0=identity, 1=full ramp)
+    static GammaRamp blendRampTowardIdentity(const GammaRamp& ramp,
+                                              const GammaRamp& identity,
+                                              double scale);
+
+    // Enforce monotonicity: ensure ramp values are strictly increasing
+    static void enforceMonotonicity(GammaRamp& ramp);
+
     static GammaRamp buildRamp(ToneCurve curve, double strength,
                                const std::vector<CurvePoint>* custom_curve = nullptr);
 };
