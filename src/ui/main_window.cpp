@@ -531,177 +531,62 @@ void MainWindow::renderGammaTab(App& app)
         ImGui::Spacing();
     }
 
-    // Tone curve visualization
+    // Tone curve visualization using ImPlot
     ImGui::Spacing();
     ImGui::TextUnformatted("Output Curve Preview");
+    ImGui::TextDisabled("Scroll to zoom | Drag to pan | Double-click to reset view");
 
-    // Draw area for the curve (with margins for axis labels)
-    const float total_height = 200.0f;
-    const float left_margin = 45.0f;
-    const float bottom_margin = 35.0f;
-    const float right_margin = 10.0f;
-    const float top_margin = 10.0f;
-
-    ImVec2 total_canvas_pos = ImGui::GetCursorScreenPos();
-    ImVec2 total_canvas_size = ImVec2(ImGui::GetContentRegionAvail().x, total_height);
-
-    // Actual curve area (excluding margins)
-    ImVec2 canvas_pos = ImVec2(total_canvas_pos.x + left_margin, total_canvas_pos.y + top_margin);
-    ImVec2 canvas_size = ImVec2(total_canvas_size.x - left_margin - right_margin,
-                                 total_canvas_size.y - top_margin - bottom_margin);
-
-    ImDrawList* draw_list = ImGui::GetWindowDrawList();
-
-    // Background for entire area
-    draw_list->AddRectFilled(total_canvas_pos,
-        ImVec2(total_canvas_pos.x + total_canvas_size.x, total_canvas_pos.y + total_canvas_size.y),
-        IM_COL32(25, 25, 25, 255));
-
-    // Background for curve area
-    draw_list->AddRectFilled(canvas_pos,
-        ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-        IM_COL32(30, 30, 30, 255));
-
-    // Draw grid lines and axis marks
-    const float grid_values[] = { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
-    for (float val : grid_values) {
-        // Vertical grid lines (for X values)
-        float x = canvas_pos.x + val * canvas_size.x;
-        draw_list->AddLine(
-            ImVec2(x, canvas_pos.y),
-            ImVec2(x, canvas_pos.y + canvas_size.y),
-            val == 0.5f ? IM_COL32(60, 60, 60, 255) : IM_COL32(45, 45, 45, 255),
-            val == 0.5f ? 1.5f : 1.0f);
-
-        // X-axis tick marks and labels
-        draw_list->AddLine(
-            ImVec2(x, canvas_pos.y + canvas_size.y),
-            ImVec2(x, canvas_pos.y + canvas_size.y + 5.0f),
-            IM_COL32(150, 150, 150, 255), 1.5f);
-
-        char label[8];
-        std::snprintf(label, sizeof(label), "%.2f", val);
-        ImVec2 text_size = ImGui::CalcTextSize(label);
-        draw_list->AddText(
-            ImVec2(x - text_size.x * 0.5f, canvas_pos.y + canvas_size.y + 8.0f),
-            IM_COL32(180, 180, 180, 255), label);
-
-        // Horizontal grid lines (for Y values)
-        float y = canvas_pos.y + canvas_size.y - val * canvas_size.y;
-        draw_list->AddLine(
-            ImVec2(canvas_pos.x, y),
-            ImVec2(canvas_pos.x + canvas_size.x, y),
-            val == 0.5f ? IM_COL32(60, 60, 60, 255) : IM_COL32(45, 45, 45, 255),
-            val == 0.5f ? 1.5f : 1.0f);
-
-        // Y-axis tick marks and labels
-        draw_list->AddLine(
-            ImVec2(canvas_pos.x - 5.0f, y),
-            ImVec2(canvas_pos.x, y),
-            IM_COL32(150, 150, 150, 255), 1.5f);
-
-        std::snprintf(label, sizeof(label), "%.2f", val);
-        text_size = ImGui::CalcTextSize(label);
-        draw_list->AddText(
-            ImVec2(canvas_pos.x - text_size.x - 8.0f, y - text_size.y * 0.5f),
-            IM_COL32(180, 180, 180, 255), label);
+    // Initialize plot limits on first frame
+    if (!plot_limits_initialized_) {
+        plot_x_min_ = 0.0;
+        plot_x_max_ = 1.0;
+        plot_y_min_ = 0.0;
+        plot_y_max_ = 1.0;
+        plot_limits_initialized_ = true;
     }
 
-    // Axis labels
-    const char* x_label = "Input (0-1)";
-    const char* y_label = "Output (0-1)";
-    ImVec2 x_label_size = ImGui::CalcTextSize(x_label);
-
-    // X-axis label (centered below graph)
-    draw_list->AddText(
-        ImVec2(canvas_pos.x + canvas_size.x * 0.5f - x_label_size.x * 0.5f,
-               canvas_pos.y + canvas_size.y + 25.0f),
-        IM_COL32(200, 200, 200, 255), x_label);
-
-    // Y-axis label (rotated 90 degrees counterclockwise)
-    ImVec2 y_label_size = ImGui::CalcTextSize(y_label);
-
-    // Start position for horizontal text (before rotation)
-    ImVec2 y_label_start = ImVec2(
-        total_canvas_pos.x + 10.0f,
-        canvas_pos.y + canvas_size.y * 0.5f - y_label_size.x * 0.5f
-    );
-
-    // Record vertex count before adding text
-    int vtx_count_before = draw_list->VtxBuffer.Size;
-
-    // Add text horizontally (will be rotated)
-    draw_list->AddText(y_label_start, IM_COL32(200, 200, 200, 255), y_label);
-
-    // Rotate vertices 90 degrees counterclockwise around text center
-    int vtx_count_after = draw_list->VtxBuffer.Size;
-    if (vtx_count_after > vtx_count_before) {
-        // Center point of the text for rotation
-        ImVec2 center = ImVec2(
-            y_label_start.x + y_label_size.x * 0.5f,
-            y_label_start.y + y_label_size.y * 0.5f
-        );
-
-        for (int i = vtx_count_before; i < vtx_count_after; i++) {
-            ImDrawVert& v = draw_list->VtxBuffer[i];
-            float x = v.pos.x - center.x;
-            float y = v.pos.y - center.y;
-            v.pos.x = center.x - y;  // 90° counterclockwise rotation
-            v.pos.y = center.y + x;
-        }
+    // Reset zoom button
+    if (ImGui::Button("Reset Zoom")) {
+        plot_x_min_ = 0.0;
+        plot_x_max_ = 1.0;
+        plot_y_min_ = 0.0;
+        plot_y_max_ = 1.0;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Fit to Curve")) {
+        // Auto-fit to curve extents with some padding
+        plot_x_min_ = -0.05;
+        plot_x_max_ = 1.05;
+        plot_y_min_ = -0.05;
+        plot_y_max_ = 1.05;
     }
 
-    // Draw screen histogram as background (if enabled)
-    if (show_histogram_) {
-        auto histogram = app.getScreenHistogram();
+    // Sort curve points before any operations
+    if (is_custom_mode && !ui_curve_points_.empty()) {
+        std::sort(ui_curve_points_.begin(), ui_curve_points_.end());
+    }
+    if (is_custom_mode && !reference_curve_points_.empty()) {
+        std::sort(reference_curve_points_.begin(), reference_curve_points_.end());
+    }
 
-        // Ensure custom curve is sorted before reuse
+    // Prepare curve data for ImPlot (256 samples)
+    static std::vector<double> curve_xs(256);
+    static std::vector<double> curve_ys(256);
+    static std::vector<double> linear_xs(2);
+    static std::vector<double> linear_ys(2);
+    static std::vector<double> ref_curve_xs(256);
+    static std::vector<double> ref_curve_ys(256);
+
+    // Linear reference line
+    linear_xs[0] = 0.0; linear_ys[0] = 0.0;
+    linear_xs[1] = 1.0; linear_ys[1] = 1.0;
+
+    const double gamma = static_cast<double>(gamma_slider_);
+
+    // Helper to evaluate the active tone curve at [0,1]
+    auto eval_curve = [&](double linear) -> double {
         if (is_custom_mode && !ui_curve_points_.empty()) {
-            std::sort(ui_curve_points_.begin(), ui_curve_points_.end());
-        }
-        if (is_custom_mode && !reference_curve_points_.empty()) {
-            std::sort(reference_curve_points_.begin(), reference_curve_points_.end());
-        }
-
-        // Helper to evaluate the active tone curve at [0,1]
-        auto eval_curve = [&](double linear) -> double {
-            if (is_custom_mode && !ui_curve_points_.empty()) {
-                const auto& points = ui_curve_points_;
-                if (linear <= points.front().x) return points.front().y;
-                if (linear >= points.back().x) return points.back().y;
-                for (size_t j = 0; j < points.size() - 1; ++j) {
-                    if (linear >= points[j].x && linear <= points[j + 1].x) {
-                        double x1 = points[j].x, y1 = points[j].y;
-                        double x2 = points[j + 1].x, y2 = points[j + 1].y;
-                        double t = (linear - x1) / (x2 - x1);
-                        return y1 + t * (y2 - y1);
-                    }
-                }
-                return linear;
-            }
-
-            switch (transfer_function_index_) {
-                case 0: // Neutral
-                    return linear;
-                case 2: // Shadow Lift
-                    return (linear <= 0.0031308)
-                        ? 12.92 * linear
-                        : 1.055 * std::pow(linear, 1.0 / 2.4) - 0.055;
-                case 3: // Soft Contrast
-                    return (linear < 0.018)
-                        ? 4.5 * linear
-                        : 1.099 * std::pow(linear, 0.45) - 0.099;
-                case 4: // Cinema
-                    return std::pow(linear, 1.0 / 2.6);
-                case 1: // Simple Gamma
-                default:
-                    return std::pow(linear, 1.0 / static_cast<double>(gamma_slider_));
-            }
-        };
-        // Helper to evaluate the reference curve (if present)
-        auto eval_reference = [&](double linear) -> double {
-            if (reference_curve_points_.empty()) return linear;
-            const auto& points = reference_curve_points_;
+            const auto& points = ui_curve_points_;
             if (linear <= points.front().x) return points.front().y;
             if (linear >= points.back().x) return points.back().y;
             for (size_t j = 0; j < points.size() - 1; ++j) {
@@ -713,15 +598,68 @@ void MainWindow::renderGammaTab(App& app)
                 }
             }
             return linear;
-        };
+        }
 
+        switch (transfer_function_index_) {
+            case 0: // Neutral
+                return linear;
+            case 2: // Shadow Lift
+                return (linear <= 0.0031308)
+                    ? 12.92 * linear
+                    : 1.055 * std::pow(linear, 1.0 / 2.4) - 0.055;
+            case 3: // Soft Contrast
+                return (linear < 0.018)
+                    ? 4.5 * linear
+                    : 1.099 * std::pow(linear, 0.45) - 0.099;
+            case 4: // Cinema
+                return std::pow(linear, 1.0 / 2.6);
+            case 1: // Simple Gamma
+            default:
+                return std::pow(linear, 1.0 / gamma);
+        }
+    };
+
+    // Generate curve data
+    for (int i = 0; i < 256; ++i) {
+        double x = i / 255.0;
+        curve_xs[i] = x;
+        curve_ys[i] = eval_curve(x);
+    }
+
+    // Generate reference curve data for custom mode
+    if (is_custom_mode && !reference_curve_points_.empty()) {
+        auto eval_reference = [&](double linear) -> double {
+            const auto& pts = reference_curve_points_;
+            if (linear <= pts.front().x) return pts.front().y;
+            if (linear >= pts.back().x) return pts.back().y;
+            for (size_t j = 0; j < pts.size() - 1; ++j) {
+                if (linear >= pts[j].x && linear <= pts[j + 1].x) {
+                    double t = (linear - pts[j].x) / (pts[j + 1].x - pts[j].x);
+                    return pts[j].y + t * (pts[j + 1].y - pts[j].y);
+                }
+            }
+            return linear;
+        };
+        for (int i = 0; i < 256; ++i) {
+            double x = i / 255.0;
+            ref_curve_xs[i] = x;
+            ref_curve_ys[i] = eval_reference(x);
+        }
+    }
+
+    // Prepare histogram data if enabled
+    static std::vector<double> hist_xs(256);
+    static std::vector<double> hist_ys_pre(256);
+    static std::vector<double> hist_ys_post(256);
+
+    if (show_histogram_) {
+        auto histogram = app.getScreenHistogram();
         if (histogram.valid) {
-            // Base (pre-LUT) histogram
+            // Reset arrays
             for (int i = 0; i < 256; ++i) {
-                histogram_xs_[i] = i / 255.0f;
+                hist_xs[i] = i / 255.0;
                 histogram_ys_[i] = histogram.luminance[i];
                 histogram_ys_post_[i] = 0.0f;
-                histogram_diff_[i] = 0.0f;
             }
 
             // Build "post" histogram by remapping bin centers through the active curve
@@ -753,392 +691,226 @@ void MainWindow::renderGammaTab(App& app)
             normalize(histogram_ys_);
             normalize(histogram_ys_post_);
 
-            // Diff = post - pre (normalized)
-            float max_abs_diff = 0.0f;
+            // Copy to double arrays for ImPlot
             for (int i = 0; i < 256; ++i) {
-                histogram_diff_[i] = histogram_ys_post_[i] - histogram_ys_[i];
-                max_abs_diff = (std::max)(max_abs_diff, std::fabs(histogram_diff_[i]));
-            }
-            if (max_abs_diff > 0.0f) {
-                for (float& v : histogram_diff_) v /= max_abs_diff;
-            }
-
-            // Draw histograms
-            float bar_width = canvas_size.x / 256.0f;
-            for (int i = 0; i < 256; ++i) {
-                // Pre (blue)
-                float h_pre = histogram_ys_[i] * canvas_size.y * 0.7f;
-                float x_pre = canvas_pos.x + histogram_xs_[i] * canvas_size.x;
-                draw_list->AddRectFilled(
-                    ImVec2(x_pre, canvas_pos.y + canvas_size.y - h_pre),
-                    ImVec2(x_pre + bar_width * 0.9f, canvas_pos.y + canvas_size.y),
-                    IM_COL32(60, 90, 150, 70));
-
-                // Post (amber), slightly narrower and inset
-                float h_post = histogram_ys_post_[i] * canvas_size.y * 0.7f;
-                float x_post = x_pre + bar_width * 0.15f;
-                draw_list->AddRectFilled(
-                    ImVec2(x_post, canvas_pos.y + canvas_size.y - h_post),
-                    ImVec2(x_post + bar_width * 0.6f, canvas_pos.y + canvas_size.y),
-                    IM_COL32(200, 140, 60, 80));
-
-                // Diff (line), green for positive, red for negative
-                float dy = histogram_diff_[i] * canvas_size.y * 0.25f; // ±25% height
-                ImU32 diff_col = (histogram_diff_[i] >= 0.0f)
-                    ? IM_COL32(80, 200, 120, 160)
-                    : IM_COL32(220, 80, 80, 160);
-                draw_list->AddLine(
-                    ImVec2(x_pre + bar_width * 0.45f, canvas_pos.y + canvas_size.y),
-                    ImVec2(x_pre + bar_width * 0.45f, canvas_pos.y + canvas_size.y - dy),
-                    diff_col, 1.5f);
+                hist_ys_pre[i] = histogram_ys_[i] * 0.7;  // Scale to 70% height
+                hist_ys_post[i] = histogram_ys_post_[i] * 0.7;
             }
         }
     }
-
-    // Draw linear reference line (gamma = 1.0)
-    draw_list->AddLine(
-        canvas_pos,
-        ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-        IM_COL32(80, 80, 80, 255), 1.5f);
-
-    // Draw Windows API valid zone (expanded 15-300% of identity) - only in Custom mode
-    // Note: The actual limits are enforced adaptively by the gamma driver layer.
-    // This visualization shows the "likely to succeed" zone.
-    if (is_custom_mode) {
-        // Build polygon for the valid zone
-        std::vector<ImVec2> valid_zone_top;
-        std::vector<ImVec2> valid_zone_bottom;
-
-        for (int i = 0; i <= 64; ++i) {
-            double x_norm = i / 64.0;
-            // Allow crushing blacks (min=0) and generous shadow lift (offset 0.2)
-            double min_y = 0.0;
-            double max_y = (std::min)(1.0, x_norm * 3.0 + 0.2);
-
-            float px = canvas_pos.x + static_cast<float>(x_norm) * canvas_size.x;
-            float py_min = canvas_pos.y + canvas_size.y - static_cast<float>(min_y) * canvas_size.y;
-            float py_max = canvas_pos.y + canvas_size.y - static_cast<float>(max_y) * canvas_size.y;
-
-            valid_zone_top.push_back(ImVec2(px, py_max));
-            valid_zone_bottom.push_back(ImVec2(px, py_min));
-        }
-
-        // Draw as filled quad strips (valid zone in green tint)
-        for (size_t i = 0; i < valid_zone_top.size() - 1; ++i) {
-            draw_list->AddQuadFilled(
-                valid_zone_top[i], valid_zone_top[i + 1],
-                valid_zone_bottom[i + 1], valid_zone_bottom[i],
-                IM_COL32(50, 80, 50, 40));
-        }
-
-        // Draw boundary lines for the valid zone
-        for (size_t i = 0; i < valid_zone_top.size() - 1; ++i) {
-            draw_list->AddLine(valid_zone_top[i], valid_zone_top[i + 1], IM_COL32(80, 120, 80, 100), 1.0f);
-            draw_list->AddLine(valid_zone_bottom[i], valid_zone_bottom[i + 1], IM_COL32(80, 120, 80, 100), 1.0f);
-        }
-    }
-
-    // Draw tone curve
-    const double gamma = static_cast<double>(gamma_slider_);
-
-    // Calculate the starting point at x=0
-    double start_y = 0.0;
-    if (is_custom_mode && !ui_curve_points_.empty()) {
-        start_y = ui_curve_points_.front().y;
-    } else {
-        // For all standard transfer functions, f(0) = 0
-        start_y = 0.0;
-    }
-    ImVec2 prev_point(canvas_pos.x, canvas_pos.y + canvas_size.y - static_cast<float>(start_y) * canvas_size.y);
 
     // Initialize ui_curve_points if in custom mode and not yet initialized
     if (is_custom_mode && ui_curve_points_.empty()) {
         ui_curve_points_ = app.getCustomCurvePoints();
     }
 
-    // Sort ui_curve_points by x before drawing
-    if (is_custom_mode && !ui_curve_points_.empty()) {
-        std::sort(ui_curve_points_.begin(), ui_curve_points_.end());
-    }
-    if (is_custom_mode && !reference_curve_points_.empty()) {
-        std::sort(reference_curve_points_.begin(), reference_curve_points_.end());
-    }
-
-    // Reference curve overlay (dashed line) for custom mode
-    if (is_custom_mode && !reference_curve_points_.empty()) {
-        ImVec2 prev_ref(canvas_pos.x,
-            canvas_pos.y + canvas_size.y - static_cast<float>(reference_curve_points_.front().y) * canvas_size.y);
-        for (int i = 1; i <= 255; ++i) {
-            double linear = i / 255.0;
-            double ref_out = 0.0;
-            // Reuse eval_reference from histogram block via lambda duplication
-            auto eval_ref_local = [&](double l) {
-                if (reference_curve_points_.empty()) return l;
-                const auto& pts = reference_curve_points_;
-                if (l <= pts.front().x) return pts.front().y;
-                if (l >= pts.back().x) return pts.back().y;
-                for (size_t j = 0; j < pts.size() - 1; ++j) {
-                    if (l >= pts[j].x && l <= pts[j + 1].x) {
-                        double t = (l - pts[j].x) / (pts[j + 1].x - pts[j].x);
-                        return pts[j].y + t * (pts[j + 1].y - pts[j].y);
-                    }
-                }
-                return l;
-            };
-            ref_out = eval_ref_local(linear);
-
-            float x = canvas_pos.x + (i / 255.0f) * canvas_size.x;
-            float y = canvas_pos.y + canvas_size.y - static_cast<float>(ref_out) * canvas_size.y;
-            ImVec2 point(x, y);
-
-            // Dashed effect: draw every other small segment
-            if (i % 4 < 2) {
-                draw_list->AddLine(prev_ref, point, IM_COL32(200, 200, 200, 120), 1.0f);
-            }
-            prev_ref = point;
-        }
-    }
-
-    for (int i = 1; i <= 255; ++i) {
-        double linear = i / 255.0;
-        double normalized_out = linear;  // Default to identity
-
-        // Apply the appropriate transfer function
-        if (is_custom_mode && !ui_curve_points_.empty()) {
-            // Use custom curve
-            const auto& points = ui_curve_points_;
-
-            if (linear <= points.front().x) {
-                normalized_out = points.front().y;
-            }
-            else if (linear >= points.back().x) {
-                normalized_out = points.back().y;
-            }
-            else {
-                // Linear interpolation
-                for (size_t j = 0; j < points.size() - 1; ++j) {
-                    if (linear >= points[j].x && linear <= points[j + 1].x) {
-                        double x1 = points[j].x;
-                        double y1 = points[j].y;
-                        double x2 = points[j + 1].x;
-                        double y2 = points[j + 1].y;
-                        double t = (linear - x1) / (x2 - x1);
-                        normalized_out = y1 + t * (y2 - y1);
-                        break;
-                    }
-                }
-            }
-        }
-        else {
-            switch (transfer_function_index_) {
-                case 0: // Neutral (Identity)
-                    normalized_out = linear;
-                    break;
-                case 2: { // Shadow Lift
-                    if (linear <= 0.0031308)
-                        normalized_out = 12.92 * linear;
-                    else
-                        normalized_out = 1.055 * std::pow(linear, 1.0 / 2.4) - 0.055;
-                    break;
-                }
-                case 3: { // Soft Contrast
-                    if (linear < 0.018)
-                        normalized_out = 4.5 * linear;
-                    else
-                        normalized_out = 1.099 * std::pow(linear, 0.45) - 0.099;
-                    break;
-                }
-                case 4: // Cinema (Gamma 2.6)
-                    normalized_out = std::pow(linear, 1.0 / 2.6);
-                    break;
-                case 1: // Simple Gamma
-                default:
-                    normalized_out = std::pow(linear, 1.0 / gamma);
-                    break;
-            }
-        }
-
-        float x = canvas_pos.x + (i / 255.0f) * canvas_size.x;
-        float y = canvas_pos.y + canvas_size.y - static_cast<float>(normalized_out) * canvas_size.y;
-
-        ImVec2 point(x, y);
-        draw_list->AddLine(prev_point, point, IM_COL32(100, 200, 100, 255), 2.0f);
-        prev_point = point;
-    }
-
-    // Interactive control points (only in Custom mode)
+    // Prepare valid zone data for custom mode
+    static std::vector<double> valid_zone_xs(65);
+    static std::vector<double> valid_zone_min(65);
+    static std::vector<double> valid_zone_max(65);
     if (is_custom_mode) {
-        const float point_radius = 6.0f;
-        const float click_radius = 8.0f;
+        for (int i = 0; i <= 64; ++i) {
+            double x_norm = i / 64.0;
+            valid_zone_xs[i] = x_norm;
+            valid_zone_min[i] = 0.0;
+            valid_zone_max[i] = (std::min)(1.0, x_norm * 3.0 + 0.2);
+        }
+    }
 
-        // Get mouse state
-        ImGuiIO& io = ImGui::GetIO();
-        ImVec2 mouse_pos = io.MousePos;
-        bool mouse_in_canvas = (mouse_pos.x >= canvas_pos.x && mouse_pos.x <= canvas_pos.x + canvas_size.x &&
-                                mouse_pos.y >= canvas_pos.y && mouse_pos.y <= canvas_pos.y + canvas_size.y);
+    // ImPlot curve editor with zoom/pan
+    ImPlotFlags plot_flags = ImPlotFlags_NoTitle | ImPlotFlags_NoLegend;
+    ImPlotAxisFlags axis_flags = ImPlotAxisFlags_None;
 
-        // Handle dragging
-        if (dragging_point_ && selected_point_index_ >= 0 && selected_point_index_ < static_cast<int>(ui_curve_points_.size())) {
-            if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-                // Update point position
-                double new_x = (mouse_pos.x - canvas_pos.x) / canvas_size.x;
-                double new_y = 1.0 - (mouse_pos.y - canvas_pos.y) / canvas_size.y;
+    // Use linked axis limits for persistent zoom state
+    ImPlot::SetNextAxesLimits(plot_x_min_, plot_x_max_, plot_y_min_, plot_y_max_, ImPlotCond_Once);
 
-                // Clamp to [0, 1]
-                new_x = std::clamp(new_x, 0.0, 1.0);
-                new_y = std::clamp(new_y, 0.0, 1.0);
+    if (ImPlot::BeginPlot("##CurveEditor", ImVec2(-1, 250), plot_flags)) {
+        // Setup axes with linked limits for zoom persistence
+        ImPlot::SetupAxis(ImAxis_X1, "Input", axis_flags);
+        ImPlot::SetupAxis(ImAxis_Y1, "Output", axis_flags);
+        ImPlot::SetupAxisLinks(ImAxis_X1, &plot_x_min_, &plot_x_max_);
+        ImPlot::SetupAxisLinks(ImAxis_Y1, &plot_y_min_, &plot_y_max_);
 
-                // First point is locked to x=0, last point is locked to x=1
-                bool is_first_point = (selected_point_index_ == 0);
-                bool is_last_point = (selected_point_index_ == static_cast<int>(ui_curve_points_.size()) - 1);
+        // Set axis zoom constraints (don't allow zooming too far out)
+        ImPlot::SetupAxisZoomConstraints(ImAxis_X1, 0.01, 2.0);
+        ImPlot::SetupAxisZoomConstraints(ImAxis_Y1, 0.01, 2.0);
 
-                if (is_first_point) {
-                    new_x = 0.0;
-                } else if (is_last_point) {
-                    new_x = 1.0;
+        // Draw histogram as bars (if enabled and valid)
+        if (show_histogram_) {
+            auto histogram = app.getScreenHistogram();
+            if (histogram.valid) {
+                ImPlot::SetNextFillStyle(ImVec4(0.24f, 0.35f, 0.59f, 0.4f));
+                ImPlot::PlotBars("Pre", hist_xs.data(), hist_ys_pre.data(), 256, 0.003);
+                ImPlot::SetNextFillStyle(ImVec4(0.78f, 0.55f, 0.24f, 0.4f));
+                ImPlot::PlotBars("Post", hist_xs.data(), hist_ys_post.data(), 256, 0.003);
+            }
+        }
+
+        // Draw valid zone (shaded area) for custom mode
+        if (is_custom_mode) {
+            ImPlot::SetNextFillStyle(ImVec4(0.2f, 0.4f, 0.2f, 0.3f));
+            ImPlot::PlotShaded("ValidZone", valid_zone_xs.data(), valid_zone_min.data(), valid_zone_max.data(), 65);
+        }
+
+        // Draw linear reference line (identity)
+        ImPlot::SetNextLineStyle(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), 1.5f);
+        ImPlot::PlotLine("Identity", linear_xs.data(), linear_ys.data(), 2);
+
+        // Draw reference curve (dashed) for custom mode
+        if (is_custom_mode && !reference_curve_points_.empty()) {
+            ImPlot::SetNextLineStyle(ImVec4(0.7f, 0.7f, 0.7f, 0.6f), 1.0f);
+            ImPlot::PlotLine("Reference", ref_curve_xs.data(), ref_curve_ys.data(), 256);
+        }
+
+        // Draw main tone curve
+        ImPlot::SetNextLineStyle(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), 2.5f);
+        ImPlot::PlotLine("Curve", curve_xs.data(), curve_ys.data(), 256);
+
+        // Interactive control points using ImPlot::DragPoint (only in Custom mode)
+        if (is_custom_mode && !ui_curve_points_.empty()) {
+            bool curve_modified = false;
+
+            for (size_t i = 0; i < ui_curve_points_.size(); ++i) {
+                // Store points in temporary variables for DragPoint
+                double px = ui_curve_points_[i].x;
+                double py = ui_curve_points_[i].y;
+
+                // Determine drag flags - lock X for first and last points
+                ImPlotDragToolFlags drag_flags = ImPlotDragToolFlags_None;
+                bool is_first = (i == 0);
+                bool is_last = (i == ui_curve_points_.size() - 1);
+
+                // Different colors for different states
+                ImVec4 point_color = ImVec4(0.4f, 0.8f, 0.4f, 1.0f);  // Green
+                if (static_cast<int>(i) == selected_point_index_) {
+                    point_color = ImVec4(1.0f, 0.8f, 0.4f, 1.0f);  // Orange when selected
                 }
 
-                // Snap to reference curve if close
-                if (!reference_curve_points_.empty()) {
-                    // Vertical snap to reference curve value at this X
-                    // Find interpolated ref Y
-                    double ref_y = 0.0;
-                    {
+                char point_id[32];
+                std::snprintf(point_id, sizeof(point_id), "##pt%zu", i);
+
+                bool clicked = false;
+                bool hovered = false;
+                bool held = false;
+
+                if (ImPlot::DragPoint(static_cast<int>(i), &px, &py, point_color, 8.0f, drag_flags, &clicked, &hovered, &held)) {
+                    // Point was dragged
+                    curve_modified = true;
+
+                    // Lock X for endpoints
+                    if (is_first) px = 0.0;
+                    if (is_last) px = 1.0;
+
+                    // Clamp to valid range
+                    px = std::clamp(px, 0.0, 1.0);
+
+                    // Constrain Y to valid zone
+                    double min_y = 0.0;
+                    double max_y = (std::min)(1.0, px * 3.0 + 0.2);
+                    py = std::clamp(py, min_y, max_y);
+
+                    // Snap to reference curve if close
+                    if (!reference_curve_points_.empty()) {
+                        // Interpolate reference Y at this X
+                        double ref_y = py;
                         const auto& pts = reference_curve_points_;
-                        if (new_x <= pts.front().x) ref_y = pts.front().y;
-                        else if (new_x >= pts.back().x) ref_y = pts.back().y;
+                        if (px <= pts.front().x) ref_y = pts.front().y;
+                        else if (px >= pts.back().x) ref_y = pts.back().y;
                         else {
                             for (size_t j = 0; j < pts.size() - 1; ++j) {
-                                if (new_x >= pts[j].x && new_x <= pts[j + 1].x) {
-                                    double t = (new_x - pts[j].x) / (pts[j + 1].x - pts[j].x);
+                                if (px >= pts[j].x && px <= pts[j + 1].x) {
+                                    double t = (px - pts[j].x) / (pts[j + 1].x - pts[j].x);
                                     ref_y = pts[j].y + t * (pts[j + 1].y - pts[j].y);
                                     break;
                                 }
                             }
                         }
-                    }
-                    const double snap_y_threshold = 0.01; // 1% output snap
-                    if (std::fabs(new_y - ref_y) < snap_y_threshold) {
-                        new_y = ref_y;
-                    }
-
-                    // Optional X snap to nearest reference control point
-                    double closest_dx = 1.0;
-                    double closest_x = new_x;
-                    for (const auto& rp : reference_curve_points_) {
-                        double dx = std::fabs(new_x - rp.x);
-                        if (dx < closest_dx) {
-                            closest_dx = dx;
-                            closest_x = rp.x;
+                        const double snap_threshold = 0.02;
+                        if (std::fabs(py - ref_y) < snap_threshold) {
+                            py = ref_y;
                         }
                     }
-                    const double snap_x_threshold = 0.01;
-                    if (closest_dx < snap_x_threshold && !is_first_point && !is_last_point) {
-                        new_x = closest_x;
-                    }
+
+                    ui_curve_points_[i].x = px;
+                    ui_curve_points_[i].y = py;
                 }
 
-                // Constrain Y to expanded valid zone
-                // Allow crushing blacks (min=0) and generous shadow lift (offset 0.2)
-                // The adaptive gamma layer will scale back if Windows rejects the ramp
+                if (held) {
+                    selected_point_index_ = static_cast<int>(i);
+                }
+
+                // Show tooltip on hover
+                if (hovered) {
+                    ImGui::BeginTooltip();
+                    ImGui::Text("X: %.3f, Y: %.3f", px, py);
+                    if (is_first) ImGui::TextDisabled("(First point - X locked)");
+                    if (is_last) ImGui::TextDisabled("(Last point - X locked)");
+                    ImGui::EndTooltip();
+                }
+            }
+
+            // Apply changes if modified
+            if (curve_modified) {
+                std::sort(ui_curve_points_.begin(), ui_curve_points_.end());
+                app.setCustomCurvePoints(ui_curve_points_);
+            }
+
+            // Handle adding new points with Ctrl+Click
+            if (ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::GetIO().KeyCtrl) {
+                ImPlotPoint mouse = ImPlot::GetPlotMousePos();
+                double new_x = std::clamp(mouse.x, 0.0, 1.0);
+                double new_y = std::clamp(mouse.y, 0.0, 1.0);
+
+                // Constrain Y to valid zone
                 double min_y = 0.0;
                 double max_y = (std::min)(1.0, new_x * 3.0 + 0.2);
                 new_y = std::clamp(new_y, min_y, max_y);
 
-                ui_curve_points_[selected_point_index_].x = new_x;
-                ui_curve_points_[selected_point_index_].y = new_y;
-
-                // Apply changes immediately
+                ui_curve_points_.push_back({new_x, new_y});
+                std::sort(ui_curve_points_.begin(), ui_curve_points_.end());
                 app.setCustomCurvePoints(ui_curve_points_);
             }
-            else {
-                // Mouse released, stop dragging
-                dragging_point_ = false;
-                selected_point_index_ = -1;
-            }
-        }
 
-        // Render control points and handle clicks
-        int hovered_point = -1;
-        for (size_t i = 0; i < ui_curve_points_.size(); ++i) {
-            float px = canvas_pos.x + static_cast<float>(ui_curve_points_[i].x) * canvas_size.x;
-            float py = canvas_pos.y + canvas_size.y - static_cast<float>(ui_curve_points_[i].y) * canvas_size.y;
+            // Handle deleting points with right-click
+            if (ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                ImPlotPoint mouse = ImPlot::GetPlotMousePos();
 
-            // Check if mouse is hovering this point
-            float dx = mouse_pos.x - px;
-            float dy = mouse_pos.y - py;
-            float dist = std::sqrt(dx * dx + dy * dy);
-
-            if (dist <= click_radius && mouse_in_canvas) {
-                hovered_point = static_cast<int>(i);
-            }
-
-            // Draw point
-            bool is_selected = (static_cast<int>(i) == selected_point_index_);
-            bool is_hovered = (static_cast<int>(i) == hovered_point);
-
-            ImU32 point_color = is_selected ? IM_COL32(255, 200, 100, 255) :
-                                is_hovered ? IM_COL32(150, 220, 150, 255) :
-                                IM_COL32(100, 200, 100, 255);
-
-            draw_list->AddCircleFilled(ImVec2(px, py), point_radius, point_color);
-            draw_list->AddCircle(ImVec2(px, py), point_radius, IM_COL32(50, 50, 50, 255), 0, 2.0f);
-        }
-
-        // Handle mouse clicks
-        if (mouse_in_canvas && !dragging_point_) {
-            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-                if (hovered_point >= 0) {
-                    // Start dragging existing point
-                    selected_point_index_ = hovered_point;
-                    dragging_point_ = true;
+                // Find closest point
+                int closest = -1;
+                double closest_dist = 0.05;  // Threshold in plot units
+                for (size_t i = 0; i < ui_curve_points_.size(); ++i) {
+                    double dx = ui_curve_points_[i].x - mouse.x;
+                    double dy = ui_curve_points_[i].y - mouse.y;
+                    double dist = std::sqrt(dx * dx + dy * dy);
+                    if (dist < closest_dist) {
+                        closest_dist = dist;
+                        closest = static_cast<int>(i);
+                    }
                 }
-                else if (io.KeyCtrl) {
-                    // Add new point (only with Ctrl held)
-                    double new_x = (mouse_pos.x - canvas_pos.x) / canvas_size.x;
-                    double new_y = 1.0 - (mouse_pos.y - canvas_pos.y) / canvas_size.y;
-                    new_x = std::clamp(new_x, 0.0, 1.0);
-                    new_y = std::clamp(new_y, 0.0, 1.0);
 
-                    // Constrain Y to expanded valid zone
-                    // Allow crushing blacks (min=0) and generous shadow lift (offset 0.2)
-                    // The adaptive gamma layer will scale back if Windows rejects the ramp
-                    double min_y = 0.0;
-                    double max_y = (std::min)(1.0, new_x * 3.0 + 0.2);
-                    new_y = std::clamp(new_y, min_y, max_y);
-
-                    ui_curve_points_.push_back({new_x, new_y});
-                    std::sort(ui_curve_points_.begin(), ui_curve_points_.end());
-                    app.setCustomCurvePoints(ui_curve_points_);
-                }
-            }
-            else if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) && hovered_point >= 0) {
-                // Delete point (keep minimum 2 points, never delete first or last)
-                bool is_first = (hovered_point == 0);
-                bool is_last = (hovered_point == static_cast<int>(ui_curve_points_.size()) - 1);
-                if (ui_curve_points_.size() > 2 && !is_first && !is_last) {
-                    ui_curve_points_.erase(ui_curve_points_.begin() + hovered_point);
+                // Delete if found and not an endpoint
+                if (closest > 0 && closest < static_cast<int>(ui_curve_points_.size()) - 1 && ui_curve_points_.size() > 2) {
+                    ui_curve_points_.erase(ui_curve_points_.begin() + closest);
                     app.setCustomCurvePoints(ui_curve_points_);
                     selected_point_index_ = -1;
                 }
             }
         }
 
-        // Show tooltip with coordinates when hovering a point
-        if (hovered_point >= 0) {
+        // Show mouse position in plot coordinates
+        if (ImPlot::IsPlotHovered()) {
+            ImPlotPoint mouse = ImPlot::GetPlotMousePos();
             ImGui::BeginTooltip();
-            ImGui::Text("X: %.3f, Y: %.3f", ui_curve_points_[hovered_point].x, ui_curve_points_[hovered_point].y);
+            ImGui::Text("(%.3f, %.3f)", mouse.x, mouse.y);
+            if (is_custom_mode) {
+                ImGui::TextDisabled("Ctrl+Click: Add point");
+                ImGui::TextDisabled("Right-click: Delete point");
+            }
             ImGui::EndTooltip();
         }
+
+        ImPlot::EndPlot();
     }
-
-    // Border around curve area
-    draw_list->AddRect(canvas_pos,
-        ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
-        IM_COL32(60, 60, 60, 255));
-
-    // Reserve space for the entire canvas (including margins)
-    ImGui::Dummy(total_canvas_size);
 }
 
 void MainWindow::renderHelpTab()

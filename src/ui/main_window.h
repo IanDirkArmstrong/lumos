@@ -56,6 +56,13 @@ private:
     int selected_point_index_ = -1;  // -1 = none selected
     bool dragging_point_ = false;
 
+    // ImPlot zoom/pan state (linked to external values for persistence)
+    double plot_x_min_ = 0.0;
+    double plot_x_max_ = 1.0;
+    double plot_y_min_ = 0.0;
+    double plot_y_max_ = 1.0;
+    bool plot_limits_initialized_ = false;
+
     // Histogram display
     bool show_histogram_ = true;
     std::array<float, 256> histogram_xs_{};   // X values (0-1)
