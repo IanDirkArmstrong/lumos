@@ -104,6 +104,9 @@ public:
     bool getMinimizeToTrayOnClose() const { return config_.minimize_to_tray_on_close; }
     void setMinimizeToTrayOnClose(bool value) { config_.minimize_to_tray_on_close = value; }
 
+    bool getAlwaysOnTop() const { return config_.always_on_top; }
+    void setAlwaysOnTop(bool value);
+
     // Get monitor count
     size_t getMonitorCount() const { return gamma_.getMonitorCount(); }
 

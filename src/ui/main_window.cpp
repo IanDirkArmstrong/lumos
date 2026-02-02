@@ -1407,6 +1407,14 @@ void MainWindow::renderSettingsTab(App& app)
         ImGui::SetTooltip("When enabled, closing the window minimizes to tray instead of exiting");
     }
 
+    bool always_on_top = app.getAlwaysOnTop();
+    if (ImGui::Checkbox("Always on top", &always_on_top)) {
+        app.setAlwaysOnTop(always_on_top);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Keep the Lumos window above all other windows");
+    }
+
     ImGui::Spacing();
     ImGui::Spacing();
     ImGui::Separator();

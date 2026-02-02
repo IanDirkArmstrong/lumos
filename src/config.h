@@ -74,6 +74,7 @@ public:
 
     // Window behavior
     bool minimize_to_tray_on_close = true;
+    bool always_on_top = false;
 
 private:
     std::filesystem::path getConfigDir();

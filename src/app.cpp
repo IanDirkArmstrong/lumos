@@ -66,6 +66,11 @@ bool App::initialize(HWND hwnd, UINT tray_msg)
         }
     }
 
+    // Apply always-on-top setting if enabled
+    if (config_.always_on_top) {
+        SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    }
+
     // Create tray icon
     if (!tray_.create(hwnd_, tray_msg)) {
         std::snprintf(status_text_, sizeof(status_text_), "Warning: Could not create tray icon");
@@ -283,6 +288,17 @@ void App::toggleGamma()
         }
         current_gamma_ = gamma_before_disable_;
         std::snprintf(status_text_, sizeof(status_text_), "Gamma ON (%.1f)", current_gamma_);
+    }
+}
+
+void App::setAlwaysOnTop(bool value)
+{
+    config_.always_on_top = value;
+    if (hwnd_) {
+        SetWindowPos(hwnd_,
+                     value ? HWND_TOPMOST : HWND_NOTOPMOST,
+                     0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE);
     }
 }
 
