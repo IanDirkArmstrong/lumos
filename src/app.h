@@ -81,6 +81,25 @@ public:
     // Get status text for UI
     const char* getStatusText() const { return status_text_; }
 
+    // Hotkey configuration
+    HotkeyBinding getHotkeyIncrease() const { return config_.hotkey_increase; }
+    HotkeyBinding getHotkeyDecrease() const { return config_.hotkey_decrease; }
+    HotkeyBinding getHotkeyReset() const { return config_.hotkey_reset; }
+    HotkeyBinding getHotkeyToggle() const { return config_.hotkey_toggle; }
+
+    // Apply new hotkey bindings (returns success, sets error message)
+    bool setHotkeys(const HotkeyBinding& increase,
+                    const HotkeyBinding& decrease,
+                    const HotkeyBinding& reset,
+                    const HotkeyBinding& toggle);
+
+    // Get last hotkey error message (empty if no error)
+    const char* getHotkeyError() const { return hotkey_error_; }
+
+    // Toggle gamma on/off
+    void toggleGamma();
+    bool isGammaEnabled() const { return gamma_enabled_; }
+
     // Get monitor count
     size_t getMonitorCount() const { return gamma_.getMonitorCount(); }
 
@@ -106,6 +125,11 @@ private:
     bool window_visible_ = true;
     bool should_exit_ = false;
     char status_text_[64] = "Ready";
+    char hotkey_error_[128] = "";
+
+    // Toggle state
+    bool gamma_enabled_ = true;
+    double gamma_before_disable_ = 1.0;
 
     static constexpr double GAMMA_STEP = 0.1;
 };

@@ -78,8 +78,12 @@ bool App::initialize(HWND hwnd, UINT tray_msg)
     tray_.on_about = [this]() { showAbout(); };
     tray_.on_exit = [this]() { requestExit(); };
 
-    // Initialize hotkeys
-    if (!hotkeys_.initialize(hwnd_)) {
+    // Initialize hotkeys with config bindings
+    if (!hotkeys_.initialize(hwnd_,
+                             config_.hotkey_increase,
+                             config_.hotkey_decrease,
+                             config_.hotkey_reset,
+                             config_.hotkey_toggle)) {
         std::snprintf(status_text_, sizeof(status_text_), "Warning: Some hotkeys failed to register");
     }
 
@@ -87,6 +91,7 @@ bool App::initialize(HWND hwnd, UINT tray_msg)
     hotkeys_.on_increase = [this]() { adjustGamma(GAMMA_STEP); };
     hotkeys_.on_decrease = [this]() { adjustGamma(-GAMMA_STEP); };
     hotkeys_.on_reset = [this]() { resetGamma(); };
+    hotkeys_.on_toggle = [this]() { toggleGamma(); };
 
     // Start screen histogram capture
     histogram_.start();
@@ -105,10 +110,11 @@ void App::shutdown()
     // Shutdown hotkeys
     hotkeys_.shutdown();
 
-    // Save config
+    // Save config (hotkey bindings are already in config_ after any setHotkeys calls)
     config_.last_gamma = current_gamma_;
     config_.transfer_function = toneCurveToString(tone_curve_);
     config_.custom_curve_points = custom_curve_points_;
+    // Hotkey bindings are updated by setHotkeys() and stored in config_
     config_.save();
 
     // Restore original gamma on all monitors
@@ -226,6 +232,57 @@ bool App::handleTrayMessage(WPARAM wParam, LPARAM lParam)
 bool App::handleHotkeyMessage(WPARAM wParam)
 {
     return hotkeys_.handleMessage(wParam);
+}
+
+bool App::setHotkeys(const HotkeyBinding& increase,
+                     const HotkeyBinding& decrease,
+                     const HotkeyBinding& reset,
+                     const HotkeyBinding& toggle)
+{
+    platform::Hotkeys::RegistrationResult result;
+    bool success = hotkeys_.reregister(increase, decrease, reset, toggle, &result);
+
+    if (success) {
+        // Update config (will be persisted on shutdown)
+        config_.hotkey_increase = increase;
+        config_.hotkey_decrease = decrease;
+        config_.hotkey_reset = reset;
+        config_.hotkey_toggle = toggle;
+        hotkey_error_[0] = '\0';
+        std::snprintf(status_text_, sizeof(status_text_), "Hotkeys updated");
+    } else {
+        // Build error message indicating which hotkeys failed
+        std::string err;
+        if (!result.increase_ok) err += "Increase ";
+        if (!result.decrease_ok) err += "Decrease ";
+        if (!result.reset_ok) err += "Reset ";
+        if (!result.toggle_ok) err += "Toggle ";
+        err += "hotkey(s) failed - may be in use by another app";
+        std::snprintf(hotkey_error_, sizeof(hotkey_error_), "%s", err.c_str());
+    }
+
+    return success;
+}
+
+void App::toggleGamma()
+{
+    if (gamma_enabled_) {
+        // Disable: store current gamma and restore original
+        gamma_before_disable_ = current_gamma_;
+        gamma_.restoreAll();
+        gamma_enabled_ = false;
+        std::snprintf(status_text_, sizeof(status_text_), "Gamma OFF");
+    } else {
+        // Enable: reapply the stored gamma value
+        gamma_enabled_ = true;
+        if (tone_curve_ == platform::ToneCurve::Custom) {
+            gamma_.applyAll(tone_curve_, gamma_before_disable_, &custom_curve_points_);
+        } else {
+            gamma_.applyAll(tone_curve_, gamma_before_disable_);
+        }
+        current_gamma_ = gamma_before_disable_;
+        std::snprintf(status_text_, sizeof(status_text_), "Gamma ON (%.1f)", current_gamma_);
+    }
 }
 
 } // namespace lumos

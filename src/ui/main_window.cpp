@@ -77,6 +77,14 @@ void MainWindow::render(App& app)
             }
         }
 
+        // Settings tab (closable)
+        if (show_settings_tab_) {
+            if (ImGui::BeginTabItem("Settings", &show_settings_tab_)) {
+                renderSettingsTab(app);
+                ImGui::EndTabItem();
+            }
+        }
+
         ImGui::EndTabBar();
     }
 
@@ -95,6 +103,13 @@ void MainWindow::renderMenuBar()
             if (ImGui::MenuItem("Exit")) {
                 // Request exit via WM_CLOSE
                 PostMessageW(GetActiveWindow(), WM_CLOSE, 0, 0);
+            }
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Edit")) {
+            if (ImGui::MenuItem("Settings")) {
+                show_settings_tab_ = true;
             }
             ImGui::EndMenu();
         }
@@ -165,99 +180,94 @@ void MainWindow::renderGammaTab(App& app)
 
     ImGui::Spacing();
 
-    // Curve strength slider (only enabled for Simple Gamma mode)
+    // Determine which mode we're in
     bool is_power_mode = (transfer_function_index_ == 1);  // Simple Gamma
     bool is_custom_mode = (transfer_function_index_ == 5); // Custom
 
-    if (!is_power_mode) {
-        ImGui::BeginDisabled();
-    }
+    // Curve strength slider and precise value input (only visible for Simple Gamma mode)
+    if (is_power_mode) {
+        ImGui::TextUnformatted("Curve Strength");
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Controls the power-law exponent");
+        }
+        ImGui::SetNextItemWidth(-1);
+        bool slider_changed = ImGui::SliderFloat("##Gamma", &gamma_slider_, 0.1f, 9.0f, "%.2f");
 
-    ImGui::TextUnformatted("Curve Strength");
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Controls the power-law exponent (only applies to Simple Gamma preset)");
-    }
-    ImGui::SetNextItemWidth(-1);
-    bool slider_changed = ImGui::SliderFloat("##Gamma", &gamma_slider_, 0.1f, 9.0f, "%.2f");
+        // Snap to common values when close (sticky tick marks)
+        static bool was_dragging = false;
+        bool is_dragging = ImGui::IsItemActive();
 
-    // Snap to common values when close (sticky tick marks)
-    static bool was_dragging = false;
-    bool is_dragging = ImGui::IsItemActive();
+        if (was_dragging && !is_dragging) {  // Just released the slider
+            const float tick_values[] = { 1.0f, 1.8f, 2.2f, 2.5f };
+            const float snap_threshold = 0.05f;  // Snap within ±0.05
 
-    if (was_dragging && !is_dragging) {  // Just released the slider
-        const float tick_values[] = { 1.0f, 1.8f, 2.2f, 2.5f };
-        const float snap_threshold = 0.05f;  // Snap within ±0.05
-
-        for (float tick_val : tick_values) {
-            if (std::fabs(gamma_slider_ - tick_val) < snap_threshold) {
-                gamma_slider_ = tick_val;
-                slider_changed = true;  // Ensure we apply the snapped value
-                break;
+            for (float tick_val : tick_values) {
+                if (std::fabs(gamma_slider_ - tick_val) < snap_threshold) {
+                    gamma_slider_ = tick_val;
+                    slider_changed = true;  // Ensure we apply the snapped value
+                    break;
+                }
             }
         }
-    }
-    was_dragging = is_dragging;
+        was_dragging = is_dragging;
 
-    if (slider_changed) {
-        app.setGamma(static_cast<double>(gamma_slider_));
-    }
-
-    // Draw tick marks at common gamma values
-    {
-        ImDrawList* draw_list = ImGui::GetWindowDrawList();
-        ImVec2 slider_min = ImGui::GetItemRectMin();
-        ImVec2 slider_max = ImGui::GetItemRectMax();
-        float slider_width = slider_max.x - slider_min.x;
-
-        // Common gamma values to mark
-        const float tick_values[] = { 1.0f, 1.8f, 2.2f, 2.5f };
-        const float gamma_min = 0.1f;
-        const float gamma_max = 9.0f;
-
-        for (float tick_val : tick_values) {
-            // Calculate position (slider uses linear mapping)
-            float t = (tick_val - gamma_min) / (gamma_max - gamma_min);
-            float x = slider_min.x + t * slider_width;
-            float y_top = slider_max.y;
-            float y_bottom = slider_max.y + 6.0f;
-
-            // Draw tick line
-            draw_list->AddLine(
-                ImVec2(x, y_top),
-                ImVec2(x, y_bottom),
-                IM_COL32(150, 150, 150, 255), 1.0f);
-
-            // Draw label
-            char label[8];
-            std::snprintf(label, sizeof(label), "%.1f", tick_val);
-            ImVec2 text_size = ImGui::CalcTextSize(label);
-            draw_list->AddText(
-                ImVec2(x - text_size.x * 0.5f, y_bottom + 2.0f),
-                IM_COL32(120, 120, 120, 255), label);
+        if (slider_changed) {
+            app.setGamma(static_cast<double>(gamma_slider_));
         }
 
-        // Add spacing to account for tick marks and labels
-        ImGui::Dummy(ImVec2(0, 20.0f));
+        // Draw tick marks at common gamma values
+        {
+            ImDrawList* draw_list = ImGui::GetWindowDrawList();
+            ImVec2 slider_min = ImGui::GetItemRectMin();
+            ImVec2 slider_max = ImGui::GetItemRectMax();
+            float slider_width = slider_max.x - slider_min.x;
+
+            // Common gamma values to mark
+            const float tick_values[] = { 1.0f, 1.8f, 2.2f, 2.5f };
+            const float gamma_min = 0.1f;
+            const float gamma_max = 9.0f;
+
+            for (float tick_val : tick_values) {
+                // Calculate position (slider uses linear mapping)
+                float t = (tick_val - gamma_min) / (gamma_max - gamma_min);
+                float x = slider_min.x + t * slider_width;
+                float y_top = slider_max.y;
+                float y_bottom = slider_max.y + 6.0f;
+
+                // Draw tick line
+                draw_list->AddLine(
+                    ImVec2(x, y_top),
+                    ImVec2(x, y_bottom),
+                    IM_COL32(150, 150, 150, 255), 1.0f);
+
+                // Draw label
+                char label[8];
+                std::snprintf(label, sizeof(label), "%.1f", tick_val);
+                ImVec2 text_size = ImGui::CalcTextSize(label);
+                draw_list->AddText(
+                    ImVec2(x - text_size.x * 0.5f, y_bottom + 2.0f),
+                    IM_COL32(120, 120, 120, 255), label);
+            }
+
+            // Add spacing to account for tick marks and labels
+            ImGui::Dummy(ImVec2(0, 20.0f));
+        }
+
+        ImGui::Spacing();
+
+        // Numeric input for precise control
+        ImGui::TextUnformatted("Precise Value:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(100.0f);
+        if (ImGui::InputFloat("##GammaInput", &gamma_slider_, 0.0f, 0.0f, "%.2f")) {
+            // Clamp to valid range
+            if (gamma_slider_ < 0.1f) gamma_slider_ = 0.1f;
+            if (gamma_slider_ > 9.0f) gamma_slider_ = 9.0f;
+            app.setGamma(static_cast<double>(gamma_slider_));
+        }
+
+        ImGui::Spacing();
     }
-
-    ImGui::Spacing();
-
-    // Numeric input for precise control
-    ImGui::TextUnformatted("Precise Value:");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(100.0f);
-    if (ImGui::InputFloat("##GammaInput", &gamma_slider_, 0.0f, 0.0f, "%.2f")) {
-        // Clamp to valid range
-        if (gamma_slider_ < 0.1f) gamma_slider_ = 0.1f;
-        if (gamma_slider_ > 9.0f) gamma_slider_ = 9.0f;
-        app.setGamma(static_cast<double>(gamma_slider_));
-    }
-
-    if (!is_power_mode) {
-        ImGui::EndDisabled();
-    }
-
-    ImGui::Spacing();
 
     // Custom curve editor controls (only show in Custom mode)
     if (is_custom_mode) {
@@ -266,9 +276,15 @@ void MainWindow::renderGammaTab(App& app)
         ImGui::TextUnformatted("Custom Curve Editor");
         ImGui::TextDisabled("Ctrl+Click: Add point | Drag: Move point | Right-click: Delete (middle points only)");
 
+        // Capture a reference curve the first time we enter custom mode this session
+        if (reference_curve_points_.empty()) {
+            reference_curve_points_ = ui_curve_points_;
+        }
+
         if (ImGui::Button("Reset to Linear", ImVec2(-1, 0))) {
             ui_curve_points_ = {{0.0, 0.0}, {1.0, 1.0}};
             app.setCustomCurvePoints(ui_curve_points_);
+            // Keep the original reference curve untouched so it remains a baseline
         }
         ImGui::Spacing();
     }
@@ -401,26 +417,143 @@ void MainWindow::renderGammaTab(App& app)
     // Draw screen histogram as background (if enabled)
     if (show_histogram_) {
         auto histogram = app.getScreenHistogram();
+
+        // Ensure custom curve is sorted before reuse
+        if (is_custom_mode && !ui_curve_points_.empty()) {
+            std::sort(ui_curve_points_.begin(), ui_curve_points_.end());
+        }
+        if (is_custom_mode && !reference_curve_points_.empty()) {
+            std::sort(reference_curve_points_.begin(), reference_curve_points_.end());
+        }
+
+        // Helper to evaluate the active tone curve at [0,1]
+        auto eval_curve = [&](double linear) -> double {
+            if (is_custom_mode && !ui_curve_points_.empty()) {
+                const auto& points = ui_curve_points_;
+                if (linear <= points.front().x) return points.front().y;
+                if (linear >= points.back().x) return points.back().y;
+                for (size_t j = 0; j < points.size() - 1; ++j) {
+                    if (linear >= points[j].x && linear <= points[j + 1].x) {
+                        double x1 = points[j].x, y1 = points[j].y;
+                        double x2 = points[j + 1].x, y2 = points[j + 1].y;
+                        double t = (linear - x1) / (x2 - x1);
+                        return y1 + t * (y2 - y1);
+                    }
+                }
+                return linear;
+            }
+
+            switch (transfer_function_index_) {
+                case 0: // Neutral
+                    return linear;
+                case 2: // Shadow Lift
+                    return (linear <= 0.0031308)
+                        ? 12.92 * linear
+                        : 1.055 * std::pow(linear, 1.0 / 2.4) - 0.055;
+                case 3: // Soft Contrast
+                    return (linear < 0.018)
+                        ? 4.5 * linear
+                        : 1.099 * std::pow(linear, 0.45) - 0.099;
+                case 4: // Cinema
+                    return std::pow(linear, 1.0 / 2.6);
+                case 1: // Simple Gamma
+                default:
+                    return std::pow(linear, 1.0 / static_cast<double>(gamma_slider_));
+            }
+        };
+        // Helper to evaluate the reference curve (if present)
+        auto eval_reference = [&](double linear) -> double {
+            if (reference_curve_points_.empty()) return linear;
+            const auto& points = reference_curve_points_;
+            if (linear <= points.front().x) return points.front().y;
+            if (linear >= points.back().x) return points.back().y;
+            for (size_t j = 0; j < points.size() - 1; ++j) {
+                if (linear >= points[j].x && linear <= points[j + 1].x) {
+                    double x1 = points[j].x, y1 = points[j].y;
+                    double x2 = points[j + 1].x, y2 = points[j + 1].y;
+                    double t = (linear - x1) / (x2 - x1);
+                    return y1 + t * (y2 - y1);
+                }
+            }
+            return linear;
+        };
+
         if (histogram.valid) {
-            // Copy histogram data for display
+            // Base (pre-LUT) histogram
             for (int i = 0; i < 256; ++i) {
                 histogram_xs_[i] = i / 255.0f;
                 histogram_ys_[i] = histogram.luminance[i];
+                histogram_ys_post_[i] = 0.0f;
+                histogram_diff_[i] = 0.0f;
             }
 
-            // Draw histogram bars
+            // Build "post" histogram by remapping bin centers through the active curve
+            for (int i = 0; i < 256; ++i) {
+                double in_x = i / 255.0;
+                float weight = histogram_ys_[i];
+                double out_x = std::clamp(eval_curve(in_x), 0.0, 1.0);
+
+                double pos = out_x * 255.0;
+                int idx = static_cast<int>(pos);
+                double t = pos - idx;
+
+                if (idx >= 0 && idx < 256) {
+                    histogram_ys_post_[idx] += static_cast<float>(weight * (1.0 - t));
+                }
+                if (idx + 1 < 256) {
+                    histogram_ys_post_[idx + 1] += static_cast<float>(weight * t);
+                }
+            }
+
+            // Normalize both histograms independently to preserve shape
+            auto normalize = [](std::array<float, 256>& arr) {
+                float m = 0.0f;
+                for (float v : arr) m = (std::max)(m, v);
+                if (m > 0.0f) {
+                    for (float& v : arr) v /= m;
+                }
+            };
+            normalize(histogram_ys_);
+            normalize(histogram_ys_post_);
+
+            // Diff = post - pre (normalized)
+            float max_abs_diff = 0.0f;
+            for (int i = 0; i < 256; ++i) {
+                histogram_diff_[i] = histogram_ys_post_[i] - histogram_ys_[i];
+                max_abs_diff = (std::max)(max_abs_diff, std::fabs(histogram_diff_[i]));
+            }
+            if (max_abs_diff > 0.0f) {
+                for (float& v : histogram_diff_) v /= max_abs_diff;
+            }
+
+            // Draw histograms
             float bar_width = canvas_size.x / 256.0f;
             for (int i = 0; i < 256; ++i) {
-                float bar_height = histogram_ys_[i] * canvas_size.y * 0.8f;  // Scale to 80% of height
-                float bar_x = canvas_pos.x + histogram_xs_[i] * canvas_size.x;
-                float bar_y_top = canvas_pos.y + canvas_size.y - bar_height;
-                float bar_y_bottom = canvas_pos.y + canvas_size.y;
-
-                // Semi-transparent blue bars
+                // Pre (blue)
+                float h_pre = histogram_ys_[i] * canvas_size.y * 0.7f;
+                float x_pre = canvas_pos.x + histogram_xs_[i] * canvas_size.x;
                 draw_list->AddRectFilled(
-                    ImVec2(bar_x, bar_y_top),
-                    ImVec2(bar_x + bar_width, bar_y_bottom),
-                    IM_COL32(60, 80, 120, 80));
+                    ImVec2(x_pre, canvas_pos.y + canvas_size.y - h_pre),
+                    ImVec2(x_pre + bar_width * 0.9f, canvas_pos.y + canvas_size.y),
+                    IM_COL32(60, 90, 150, 70));
+
+                // Post (amber), slightly narrower and inset
+                float h_post = histogram_ys_post_[i] * canvas_size.y * 0.7f;
+                float x_post = x_pre + bar_width * 0.15f;
+                draw_list->AddRectFilled(
+                    ImVec2(x_post, canvas_pos.y + canvas_size.y - h_post),
+                    ImVec2(x_post + bar_width * 0.6f, canvas_pos.y + canvas_size.y),
+                    IM_COL32(200, 140, 60, 80));
+
+                // Diff (line), green for positive, red for negative
+                float dy = histogram_diff_[i] * canvas_size.y * 0.25f; // ±25% height
+                ImU32 diff_col = (histogram_diff_[i] >= 0.0f)
+                    ? IM_COL32(80, 200, 120, 160)
+                    : IM_COL32(220, 80, 80, 160);
+                draw_list->AddLine(
+                    ImVec2(x_pre + bar_width * 0.45f, canvas_pos.y + canvas_size.y),
+                    ImVec2(x_pre + bar_width * 0.45f, canvas_pos.y + canvas_size.y - dy),
+                    diff_col, 1.5f);
             }
         }
     }
@@ -486,6 +619,44 @@ void MainWindow::renderGammaTab(App& app)
     // Sort ui_curve_points by x before drawing
     if (is_custom_mode && !ui_curve_points_.empty()) {
         std::sort(ui_curve_points_.begin(), ui_curve_points_.end());
+    }
+    if (is_custom_mode && !reference_curve_points_.empty()) {
+        std::sort(reference_curve_points_.begin(), reference_curve_points_.end());
+    }
+
+    // Reference curve overlay (dashed line) for custom mode
+    if (is_custom_mode && !reference_curve_points_.empty()) {
+        ImVec2 prev_ref(canvas_pos.x,
+            canvas_pos.y + canvas_size.y - static_cast<float>(reference_curve_points_.front().y) * canvas_size.y);
+        for (int i = 1; i <= 255; ++i) {
+            double linear = i / 255.0;
+            double ref_out = 0.0;
+            // Reuse eval_reference from histogram block via lambda duplication
+            auto eval_ref_local = [&](double l) {
+                if (reference_curve_points_.empty()) return l;
+                const auto& pts = reference_curve_points_;
+                if (l <= pts.front().x) return pts.front().y;
+                if (l >= pts.back().x) return pts.back().y;
+                for (size_t j = 0; j < pts.size() - 1; ++j) {
+                    if (l >= pts[j].x && l <= pts[j + 1].x) {
+                        double t = (l - pts[j].x) / (pts[j + 1].x - pts[j].x);
+                        return pts[j].y + t * (pts[j + 1].y - pts[j].y);
+                    }
+                }
+                return l;
+            };
+            ref_out = eval_ref_local(linear);
+
+            float x = canvas_pos.x + (i / 255.0f) * canvas_size.x;
+            float y = canvas_pos.y + canvas_size.y - static_cast<float>(ref_out) * canvas_size.y;
+            ImVec2 point(x, y);
+
+            // Dashed effect: draw every other small segment
+            if (i % 4 < 2) {
+                draw_list->AddLine(prev_ref, point, IM_COL32(200, 200, 200, 120), 1.0f);
+            }
+            prev_ref = point;
+        }
     }
 
     for (int i = 1; i <= 255; ++i) {
@@ -585,6 +756,46 @@ void MainWindow::renderGammaTab(App& app)
                     new_x = 0.0;
                 } else if (is_last_point) {
                     new_x = 1.0;
+                }
+
+                // Snap to reference curve if close
+                if (!reference_curve_points_.empty()) {
+                    // Vertical snap to reference curve value at this X
+                    // Find interpolated ref Y
+                    double ref_y = 0.0;
+                    {
+                        const auto& pts = reference_curve_points_;
+                        if (new_x <= pts.front().x) ref_y = pts.front().y;
+                        else if (new_x >= pts.back().x) ref_y = pts.back().y;
+                        else {
+                            for (size_t j = 0; j < pts.size() - 1; ++j) {
+                                if (new_x >= pts[j].x && new_x <= pts[j + 1].x) {
+                                    double t = (new_x - pts[j].x) / (pts[j + 1].x - pts[j].x);
+                                    ref_y = pts[j].y + t * (pts[j + 1].y - pts[j].y);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    const double snap_y_threshold = 0.01; // 1% output snap
+                    if (std::fabs(new_y - ref_y) < snap_y_threshold) {
+                        new_y = ref_y;
+                    }
+
+                    // Optional X snap to nearest reference control point
+                    double closest_dx = 1.0;
+                    double closest_x = new_x;
+                    for (const auto& rp : reference_curve_points_) {
+                        double dx = std::fabs(new_x - rp.x);
+                        if (dx < closest_dx) {
+                            closest_dx = dx;
+                            closest_x = rp.x;
+                        }
+                    }
+                    const double snap_x_threshold = 0.01;
+                    if (closest_dx < snap_x_threshold && !is_first_point && !is_last_point) {
+                        new_x = closest_x;
+                    }
                 }
 
                 // Constrain Y to Windows API valid zone (50-150% of identity)
@@ -700,7 +911,7 @@ void MainWindow::renderGammaTab(App& app)
     // Hotkey hint
     ImGui::Spacing();
     ImGui::Spacing();
-    ImGui::TextDisabled("Hotkeys: Ctrl+Alt+Up/Down (adjust), Ctrl+Alt+R (reset)");
+    ImGui::TextDisabled("Global hotkeys available (customize in Edit > Settings)");
 
     // Status at bottom
     ImGui::Spacing();
@@ -746,15 +957,19 @@ void MainWindow::renderHelpTab()
 
     ImGui::TextUnformatted("Global Hotkeys");
     ImGui::Spacing();
+    ImGui::TextDisabled("(Customize via Edit > Settings)");
+    ImGui::Spacing();
 
     ImGui::Columns(2, "hotkeys", false);
     ImGui::SetColumnWidth(0, 150);
-    ImGui::Text("Ctrl+Alt+Up"); ImGui::NextColumn();
-    ImGui::Text("Increase curve strength"); ImGui::NextColumn();
-    ImGui::Text("Ctrl+Alt+Down"); ImGui::NextColumn();
-    ImGui::Text("Decrease curve strength"); ImGui::NextColumn();
-    ImGui::Text("Ctrl+Alt+R"); ImGui::NextColumn();
-    ImGui::Text("Restore captured defaults"); ImGui::NextColumn();
+    ImGui::Text("Increase"); ImGui::NextColumn();
+    ImGui::Text("Increase curve strength (default: Ctrl+Alt+Up)"); ImGui::NextColumn();
+    ImGui::Text("Decrease"); ImGui::NextColumn();
+    ImGui::Text("Decrease curve strength (default: Ctrl+Alt+Down)"); ImGui::NextColumn();
+    ImGui::Text("Reset"); ImGui::NextColumn();
+    ImGui::Text("Restore captured defaults (default: Ctrl+Alt+R)"); ImGui::NextColumn();
+    ImGui::Text("Toggle"); ImGui::NextColumn();
+    ImGui::Text("Turn gamma on/off (default: Ctrl+Alt+G)"); ImGui::NextColumn();
     ImGui::Columns(1);
 
     ImGui::Spacing();
@@ -797,6 +1012,154 @@ void MainWindow::renderAboutTab()
     ImGui::TextUnformatted("License: GPL v2");
     ImGui::TextDisabled("This is free software. You may redistribute copies of it");
     ImGui::TextDisabled("under the terms of the GNU General Public License.");
+}
+
+void MainWindow::renderSettingsTab(App& app)
+{
+    ImGui::Spacing();
+
+    // Initialize edit state from app on first render or when tab reopens
+    if (!hotkey_settings_initialized_) {
+        edit_hotkey_increase_ = app.getHotkeyIncrease();
+        edit_hotkey_decrease_ = app.getHotkeyDecrease();
+        edit_hotkey_reset_ = app.getHotkeyReset();
+        edit_hotkey_toggle_ = app.getHotkeyToggle();
+        hotkey_settings_initialized_ = true;
+        hotkey_settings_dirty_ = false;
+    }
+
+    ImGui::TextUnformatted("Global Hotkeys");
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::TextWrapped(
+        "Configure keyboard shortcuts for gamma adjustments. "
+        "Hotkeys work system-wide, even when Lumos is minimized.");
+
+    ImGui::Spacing();
+
+    // Get bindable keys for dropdown
+    const auto& keys = HotkeyUtils::getBindableKeys();
+
+    // Helper to find key index
+    auto findKeyIndex = [&keys](UINT vk) -> int {
+        for (size_t i = 0; i < keys.size(); ++i) {
+            if (keys[i].vk == vk) return static_cast<int>(i);
+        }
+        return 0;
+    };
+
+    // Helper to render a hotkey row
+    auto renderHotkeyRow = [&](const char* label, HotkeyBinding& binding) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(label);
+
+        ImGui::TableNextColumn();
+        // Display current binding
+        std::string display = HotkeyUtils::bindingToString(binding);
+        ImGui::TextDisabled("%s", display.c_str());
+
+        ImGui::TableNextColumn();
+        // Modifier checkboxes
+        bool ctrl = (binding.modifiers & MOD_CONTROL) != 0;
+        bool alt = (binding.modifiers & MOD_ALT) != 0;
+        bool shift = (binding.modifiers & MOD_SHIFT) != 0;
+
+        ImGui::PushID(label);
+        if (ImGui::Checkbox("Ctrl", &ctrl)) {
+            binding.modifiers = (binding.modifiers & ~MOD_CONTROL) | (ctrl ? MOD_CONTROL : 0);
+            hotkey_settings_dirty_ = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Alt", &alt)) {
+            binding.modifiers = (binding.modifiers & ~MOD_ALT) | (alt ? MOD_ALT : 0);
+            hotkey_settings_dirty_ = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Shift", &shift)) {
+            binding.modifiers = (binding.modifiers & ~MOD_SHIFT) | (shift ? MOD_SHIFT : 0);
+            hotkey_settings_dirty_ = true;
+        }
+
+        ImGui::TableNextColumn();
+        // Key dropdown
+        int current_idx = findKeyIndex(binding.key);
+        ImGui::SetNextItemWidth(100);
+        if (ImGui::BeginCombo("##key", keys[current_idx].name)) {
+            for (size_t i = 0; i < keys.size(); ++i) {
+                bool selected = (static_cast<int>(i) == current_idx);
+                if (ImGui::Selectable(keys[i].name, selected)) {
+                    binding.key = keys[i].vk;
+                    hotkey_settings_dirty_ = true;
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::PopID();
+    };
+
+    // Hotkey table
+    if (ImGui::BeginTable("HotkeyTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+        ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 120);
+        ImGui::TableSetupColumn("Current", ImGuiTableColumnFlags_WidthFixed, 130);
+        ImGui::TableSetupColumn("Modifiers", ImGuiTableColumnFlags_WidthFixed, 180);
+        ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
+
+        renderHotkeyRow("Increase Gamma", edit_hotkey_increase_);
+        renderHotkeyRow("Decrease Gamma", edit_hotkey_decrease_);
+        renderHotkeyRow("Reset Gamma", edit_hotkey_reset_);
+        renderHotkeyRow("Toggle On/Off", edit_hotkey_toggle_);
+
+        ImGui::EndTable();
+    }
+
+    // Error display
+    const char* error = app.getHotkeyError();
+    if (error && error[0] != '\0') {
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", error);
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // Apply/Revert buttons
+    if (hotkey_settings_dirty_) {
+        if (ImGui::Button("Apply Changes")) {
+            if (app.setHotkeys(edit_hotkey_increase_,
+                               edit_hotkey_decrease_,
+                               edit_hotkey_reset_,
+                               edit_hotkey_toggle_)) {
+                hotkey_settings_dirty_ = false;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Revert")) {
+            edit_hotkey_increase_ = app.getHotkeyIncrease();
+            edit_hotkey_decrease_ = app.getHotkeyDecrease();
+            edit_hotkey_reset_ = app.getHotkeyReset();
+            edit_hotkey_toggle_ = app.getHotkeyToggle();
+            hotkey_settings_dirty_ = false;
+        }
+    } else {
+        ImGui::BeginDisabled();
+        ImGui::Button("Apply Changes");
+        ImGui::SameLine();
+        ImGui::Button("Revert");
+        ImGui::EndDisabled();
+    }
+
+    // Hint text
+    ImGui::Spacing();
+    ImGui::Spacing();
+    ImGui::TextDisabled("Note: Hotkeys must have at least one modifier (Ctrl, Alt, or Shift).");
+    ImGui::TextDisabled("Some key combinations may be reserved by Windows or other applications.");
 }
 
 void MainWindow::renderTestPatternWindow()
