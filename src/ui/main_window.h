@@ -22,10 +22,10 @@ public:
     // Render the window (call each frame)
     void render(App& app);
 
-    // Open tabs
-    void openHelp() { show_help_tab_ = true; }
-    void openAbout() { show_about_tab_ = true; }
-    void openSettings() { show_settings_tab_ = true; }
+    // Open tabs (and focus them)
+    void openHelp() { show_help_tab_ = true; focus_help_tab_ = true; }
+    void openAbout() { show_about_tab_ = true; focus_about_tab_ = true; }
+    void openSettings() { show_settings_tab_ = true; focus_settings_tab_ = true; }
 
     // Open windows
     void openTestPattern() { show_test_pattern_window_ = true; }
@@ -59,6 +59,11 @@ private:
     bool show_help_tab_ = false;
     bool show_about_tab_ = false;
     bool show_settings_tab_ = false;
+
+    // Tab focus (set when opening to make it the active tab)
+    bool focus_help_tab_ = false;
+    bool focus_about_tab_ = false;
+    bool focus_settings_tab_ = false;
 
     // Settings tab state
     HotkeyBinding edit_hotkey_increase_;

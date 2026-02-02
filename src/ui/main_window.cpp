@@ -63,26 +63,32 @@ void MainWindow::render(App& app)
 
         // Help tab (closable)
         if (show_help_tab_) {
-            if (ImGui::BeginTabItem("Help", &show_help_tab_)) {
+            ImGuiTabItemFlags help_flags = focus_help_tab_ ? ImGuiTabItemFlags_SetSelected : 0;
+            if (ImGui::BeginTabItem("Help", &show_help_tab_, help_flags)) {
                 renderHelpTab();
                 ImGui::EndTabItem();
             }
+            focus_help_tab_ = false;
         }
 
         // About tab (closable)
         if (show_about_tab_) {
-            if (ImGui::BeginTabItem("About", &show_about_tab_)) {
+            ImGuiTabItemFlags about_flags = focus_about_tab_ ? ImGuiTabItemFlags_SetSelected : 0;
+            if (ImGui::BeginTabItem("About", &show_about_tab_, about_flags)) {
                 renderAboutTab();
                 ImGui::EndTabItem();
             }
+            focus_about_tab_ = false;
         }
 
         // Settings tab (closable)
         if (show_settings_tab_) {
-            if (ImGui::BeginTabItem("Settings", &show_settings_tab_)) {
+            ImGuiTabItemFlags settings_flags = focus_settings_tab_ ? ImGuiTabItemFlags_SetSelected : 0;
+            if (ImGui::BeginTabItem("Settings", &show_settings_tab_, settings_flags)) {
                 renderSettingsTab(app);
                 ImGui::EndTabItem();
             }
+            focus_settings_tab_ = false;
         }
 
         ImGui::EndTabBar();
@@ -110,6 +116,7 @@ void MainWindow::renderMenuBar()
         if (ImGui::BeginMenu("Edit")) {
             if (ImGui::MenuItem("Settings")) {
                 show_settings_tab_ = true;
+                focus_settings_tab_ = true;
             }
             ImGui::EndMenu();
         }
@@ -117,9 +124,11 @@ void MainWindow::renderMenuBar()
         if (ImGui::BeginMenu("Help")) {
             if (ImGui::MenuItem("Help", "F1")) {
                 show_help_tab_ = true;
+                focus_help_tab_ = true;
             }
             if (ImGui::MenuItem("About")) {
                 show_about_tab_ = true;
+                focus_about_tab_ = true;
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Test Pattern")) {
@@ -292,11 +301,6 @@ void MainWindow::renderGammaTab(App& app)
     // Tone curve visualization
     ImGui::Spacing();
     ImGui::TextUnformatted("Output Curve Preview");
-    ImGui::SameLine();
-    ImGui::Checkbox("Show Histogram", &show_histogram_);
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Shows screen luminance distribution as background");
-    }
 
     // Draw area for the curve (with margins for axis labels)
     const float total_height = 200.0f;
@@ -897,20 +901,8 @@ void MainWindow::renderGammaTab(App& app)
     ImGui::Dummy(total_canvas_size);
 
     ImGui::Spacing();
-    ImGui::Spacing();
-
-    // Reset button
-    if (ImGui::Button("Restore Captured Defaults", ImVec2(-1, 0))) {
-        app.resetGamma();
-        // Slider will auto-sync on next frame
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Restores the GPU output curve captured at startup");
-    }
 
     // Hotkey hint
-    ImGui::Spacing();
-    ImGui::Spacing();
     ImGui::TextDisabled("Global hotkeys available (customize in Edit > Settings)");
 
     // Status at bottom
@@ -1160,6 +1152,36 @@ void MainWindow::renderSettingsTab(App& app)
     ImGui::Spacing();
     ImGui::TextDisabled("Note: Hotkeys must have at least one modifier (Ctrl, Alt, or Shift).");
     ImGui::TextDisabled("Some key combinations may be reserved by Windows or other applications.");
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::TextUnformatted("Display Options");
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::Checkbox("Show Histogram", &show_histogram_);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Shows screen luminance distribution in the curve preview");
+    }
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::TextUnformatted("Reset");
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    if (ImGui::Button("Reset Gamma", ImVec2(-1, 0))) {
+        app.resetGamma();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Restores the GPU output curve captured at startup");
+    }
 }
 
 void MainWindow::renderTestPatternWindow()
