@@ -250,7 +250,7 @@ void MainWindow::renderGammaTab(App& app)
         ImGui::Separator();
         ImGui::Spacing();
         ImGui::TextUnformatted("Custom Curve Editor");
-        ImGui::TextDisabled("Left-click: Add point | Drag: Move point | Right-click: Delete point");
+        ImGui::TextDisabled("Ctrl+Click: Add point | Drag: Move point | Right-click: Delete (middle points only)");
 
         if (ImGui::Button("Reset to Linear", ImVec2(-1, 0))) {
             ui_curve_points_ = {{0.0, 0.0}, {1.0, 1.0}};
@@ -337,7 +337,7 @@ void MainWindow::renderGammaTab(App& app)
 
     // Axis labels
     const char* x_label = "Encoded Signal";
-    const char* y_label = "Display Luminance";
+    const char* y_label = "Luminance";
     ImVec2 x_label_size = ImGui::CalcTextSize(x_label);
 
     // X-axis label (centered below graph)
@@ -346,20 +346,37 @@ void MainWindow::renderGammaTab(App& app)
                canvas_pos.y + canvas_size.y + 25.0f),
         IM_COL32(200, 200, 200, 255), x_label);
 
-    // Y-axis label (vertical text, rendered character by character)
-    float y_label_start_y = canvas_pos.y + canvas_size.y * 0.5f;
-    float char_spacing = 12.0f;
-    size_t y_label_len = std::strlen(y_label);
-    float total_label_height = (y_label_len - 1) * char_spacing;
-    y_label_start_y -= total_label_height * 0.5f; // Center vertically
+    // Y-axis label (rotated 90 degrees counterclockwise)
+    ImVec2 y_label_size = ImGui::CalcTextSize(y_label);
 
-    for (size_t i = 0; i < y_label_len; ++i) {
-        char single_char[2] = {y_label[i], '\0'};
-        ImVec2 char_size = ImGui::CalcTextSize(single_char);
-        draw_list->AddText(
-            ImVec2(total_canvas_pos.x + 3.0f - char_size.x * 0.5f,
-                   y_label_start_y + i * char_spacing),
-            IM_COL32(200, 200, 200, 255), single_char);
+    // Start position for horizontal text (before rotation)
+    ImVec2 y_label_start = ImVec2(
+        total_canvas_pos.x + 10.0f,
+        canvas_pos.y + canvas_size.y * 0.5f - y_label_size.x * 0.5f
+    );
+
+    // Record vertex count before adding text
+    int vtx_count_before = draw_list->VtxBuffer.Size;
+
+    // Add text horizontally (will be rotated)
+    draw_list->AddText(y_label_start, IM_COL32(200, 200, 200, 255), y_label);
+
+    // Rotate vertices 90 degrees counterclockwise around text center
+    int vtx_count_after = draw_list->VtxBuffer.Size;
+    if (vtx_count_after > vtx_count_before) {
+        // Center point of the text for rotation
+        ImVec2 center = ImVec2(
+            y_label_start.x + y_label_size.x * 0.5f,
+            y_label_start.y + y_label_size.y * 0.5f
+        );
+
+        for (int i = vtx_count_before; i < vtx_count_after; i++) {
+            ImDrawVert& v = draw_list->VtxBuffer[i];
+            float x = v.pos.x - center.x;
+            float y = v.pos.y - center.y;
+            v.pos.x = center.x - y;  // 90° counterclockwise rotation
+            v.pos.y = center.y + x;
+        }
     }
 
     // Draw linear reference line (gamma = 1.0)
@@ -370,7 +387,16 @@ void MainWindow::renderGammaTab(App& app)
 
     // Draw gamma curve
     const double gamma = static_cast<double>(gamma_slider_);
-    ImVec2 prev_point = canvas_pos;
+
+    // Calculate the starting point at x=0
+    double start_y = 0.0;
+    if (is_custom_mode && !ui_curve_points_.empty()) {
+        start_y = ui_curve_points_.front().y;
+    } else {
+        // For all standard transfer functions, f(0) = 0
+        start_y = 0.0;
+    }
+    ImVec2 prev_point(canvas_pos.x, canvas_pos.y + canvas_size.y - static_cast<float>(start_y) * canvas_size.y);
 
     // Initialize ui_curve_points if in custom mode and not yet initialized
     if (is_custom_mode && ui_curve_points_.empty()) {
@@ -469,6 +495,16 @@ void MainWindow::renderGammaTab(App& app)
                 new_x = std::clamp(new_x, 0.0, 1.0);
                 new_y = std::clamp(new_y, 0.0, 1.0);
 
+                // First point is locked to x=0, last point is locked to x=1
+                bool is_first_point = (selected_point_index_ == 0);
+                bool is_last_point = (selected_point_index_ == static_cast<int>(ui_curve_points_.size()) - 1);
+
+                if (is_first_point) {
+                    new_x = 0.0;
+                } else if (is_last_point) {
+                    new_x = 1.0;
+                }
+
                 ui_curve_points_[selected_point_index_].x = new_x;
                 ui_curve_points_[selected_point_index_].y = new_y;
 
@@ -517,8 +553,8 @@ void MainWindow::renderGammaTab(App& app)
                     selected_point_index_ = hovered_point;
                     dragging_point_ = true;
                 }
-                else {
-                    // Add new point
+                else if (io.KeyCtrl) {
+                    // Add new point (only with Ctrl held)
                     double new_x = (mouse_pos.x - canvas_pos.x) / canvas_size.x;
                     double new_y = 1.0 - (mouse_pos.y - canvas_pos.y) / canvas_size.y;
                     new_x = std::clamp(new_x, 0.0, 1.0);
@@ -530,8 +566,10 @@ void MainWindow::renderGammaTab(App& app)
                 }
             }
             else if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) && hovered_point >= 0) {
-                // Delete point (keep minimum 2 points)
-                if (ui_curve_points_.size() > 2) {
+                // Delete point (keep minimum 2 points, never delete first or last)
+                bool is_first = (hovered_point == 0);
+                bool is_last = (hovered_point == static_cast<int>(ui_curve_points_.size()) - 1);
+                if (ui_curve_points_.size() > 2 && !is_first && !is_last) {
                     ui_curve_points_.erase(ui_curve_points_.begin() + hovered_point);
                     app.setCustomCurvePoints(ui_curve_points_);
                     selected_point_index_ = -1;
