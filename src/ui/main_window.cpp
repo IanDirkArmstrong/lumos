@@ -53,46 +53,58 @@ void MainWindow::render(App& app)
     // Render menu bar
     renderMenuBar();
 
-    // Render tab bar
-    if (ImGui::BeginTabBar("MainTabBar", ImGuiTabBarFlags_None)) {
-        // Gamma control tab (always visible, not closable)
-        if (ImGui::BeginTabItem("Gamma")) {
-            renderGammaTab(app);
-            ImGui::EndTabItem();
-        }
+    // Calculate content area height (excluding status bar)
+    const float status_bar_height = 24.0f;
+    float content_height = ImGui::GetContentRegionAvail().y - status_bar_height;
 
-        // Help tab (closable)
-        if (show_help_tab_) {
-            ImGuiTabItemFlags help_flags = focus_help_tab_ ? ImGuiTabItemFlags_SetSelected : 0;
-            if (ImGui::BeginTabItem("Help", &show_help_tab_, help_flags)) {
-                renderHelpTab();
+    // Content area child window (to prevent overlap with status bar)
+    ImGuiWindowFlags child_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+    if (ImGui::BeginChild("##ContentArea", ImVec2(0, content_height), false, child_flags)) {
+        // Render tab bar
+        if (ImGui::BeginTabBar("MainTabBar", ImGuiTabBarFlags_None)) {
+            // Gamma control tab (always visible, not closable)
+            if (ImGui::BeginTabItem("Gamma")) {
+                renderGammaTab(app);
                 ImGui::EndTabItem();
             }
-            focus_help_tab_ = false;
-        }
 
-        // About tab (closable)
-        if (show_about_tab_) {
-            ImGuiTabItemFlags about_flags = focus_about_tab_ ? ImGuiTabItemFlags_SetSelected : 0;
-            if (ImGui::BeginTabItem("About", &show_about_tab_, about_flags)) {
-                renderAboutTab();
-                ImGui::EndTabItem();
+            // Help tab (closable)
+            if (show_help_tab_) {
+                ImGuiTabItemFlags help_flags = focus_help_tab_ ? ImGuiTabItemFlags_SetSelected : 0;
+                if (ImGui::BeginTabItem("Help", &show_help_tab_, help_flags)) {
+                    renderHelpTab();
+                    ImGui::EndTabItem();
+                }
+                focus_help_tab_ = false;
             }
-            focus_about_tab_ = false;
-        }
 
-        // Settings tab (closable)
-        if (show_settings_tab_) {
-            ImGuiTabItemFlags settings_flags = focus_settings_tab_ ? ImGuiTabItemFlags_SetSelected : 0;
-            if (ImGui::BeginTabItem("Settings", &show_settings_tab_, settings_flags)) {
-                renderSettingsTab(app);
-                ImGui::EndTabItem();
+            // About tab (closable)
+            if (show_about_tab_) {
+                ImGuiTabItemFlags about_flags = focus_about_tab_ ? ImGuiTabItemFlags_SetSelected : 0;
+                if (ImGui::BeginTabItem("About", &show_about_tab_, about_flags)) {
+                    renderAboutTab();
+                    ImGui::EndTabItem();
+                }
+                focus_about_tab_ = false;
             }
-            focus_settings_tab_ = false;
-        }
 
-        ImGui::EndTabBar();
+            // Settings tab (closable)
+            if (show_settings_tab_) {
+                ImGuiTabItemFlags settings_flags = focus_settings_tab_ ? ImGuiTabItemFlags_SetSelected : 0;
+                if (ImGui::BeginTabItem("Settings", &show_settings_tab_, settings_flags)) {
+                    renderSettingsTab(app);
+                    ImGui::EndTabItem();
+                }
+                focus_settings_tab_ = false;
+            }
+
+            ImGui::EndTabBar();
+        }
     }
+    ImGui::EndChild();
+
+    // Render status bar at the bottom
+    renderStatusBar(app);
 
     ImGui::End();
 
@@ -141,17 +153,129 @@ void MainWindow::renderMenuBar()
     }
 }
 
+static void drawMonitorIcon(ImDrawList* draw_list, ImVec2 pos, float size, bool active)
+{
+    // Colors - outline style (active = green outline, inactive = gray outline)
+    ImU32 outline_color = active ? IM_COL32(100, 200, 120, 255) : IM_COL32(120, 120, 120, 255);
+    float thickness = 1.5f;
+
+    // Monitor body (outer rectangle) - outline only
+    float body_width = size * 0.85f;
+    float body_height = size * 0.6f;
+    float body_x = pos.x + (size - body_width) * 0.5f;
+    float body_y = pos.y;
+
+    draw_list->AddRect(
+        ImVec2(body_x, body_y),
+        ImVec2(body_x + body_width, body_y + body_height),
+        outline_color, 2.0f, 0, thickness);
+
+    // Screen (inner rectangle) - outline only
+    float screen_margin = size * 0.1f;
+    draw_list->AddRect(
+        ImVec2(body_x + screen_margin, body_y + screen_margin),
+        ImVec2(body_x + body_width - screen_margin, body_y + body_height - screen_margin),
+        outline_color, 1.0f, 0, thickness * 0.7f);
+
+    // Stand neck - filled (small detail)
+    float neck_width = size * 0.12f;
+    float neck_height = size * 0.1f;
+    float neck_x = pos.x + (size - neck_width) * 0.5f;
+    float neck_y = body_y + body_height;
+
+    draw_list->AddRectFilled(
+        ImVec2(neck_x, neck_y),
+        ImVec2(neck_x + neck_width, neck_y + neck_height),
+        outline_color);
+
+    // Stand base - outline
+    float base_width = size * 0.35f;
+    float base_height = size * 0.06f;
+    float base_x = pos.x + (size - base_width) * 0.5f;
+    float base_y = neck_y + neck_height;
+
+    draw_list->AddRectFilled(
+        ImVec2(base_x, base_y),
+        ImVec2(base_x + base_width, base_y + base_height),
+        outline_color, 1.0f);
+}
+
+void MainWindow::renderStatusBar(App& app)
+{
+    // Position status bar at the bottom of the window
+    float status_height = 24.0f;
+    ImVec2 window_pos = ImGui::GetWindowPos();
+    ImVec2 window_size = ImGui::GetWindowSize();
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+    // Calculate status bar position (at bottom of window, edge to edge)
+    float status_y = window_pos.y + window_size.y - status_height;
+
+    // Draw background fill for status bar (edge to edge)
+    draw_list->AddRectFilled(
+        ImVec2(window_pos.x, status_y),
+        ImVec2(window_pos.x + window_size.x, window_pos.y + window_size.y),
+        IM_COL32(30, 30, 30, 255));
+
+    // Draw separator line (edge to edge)
+    draw_list->AddLine(
+        ImVec2(window_pos.x, status_y),
+        ImVec2(window_pos.x + window_size.x, status_y),
+        IM_COL32(60, 60, 60, 255), 1.0f);
+
+    // Layout parameters
+    float padding_x = ImGui::GetStyle().WindowPadding.x;
+    float icon_size = 16.0f;
+    float icon_padding = 4.0f;
+    float vertical_padding = (status_height - icon_size) * 0.5f;
+    float content_y = status_y + vertical_padding;
+
+    // Get preset name
+    const char* preset_names[] = {
+        "Neutral", "Simple Gamma", "Shadow Lift", "Soft Contrast", "Cinema", "Custom"
+    };
+    const char* preset_name = preset_names[transfer_function_index_];
+
+    // Draw preset text on the left
+    float text_x = window_pos.x + padding_x;
+    float text_y = status_y + (status_height - ImGui::GetTextLineHeight()) * 0.5f;
+    draw_list->AddText(ImVec2(text_x, text_y), IM_COL32(180, 180, 180, 255), preset_name);
+
+    // Monitor icons on the right
+    size_t monitor_count = app.getMonitorCount();
+    bool gamma_active = app.isGammaEnabled();
+    float icons_total_width = monitor_count * (icon_size + icon_padding) - icon_padding;
+    float icons_x = window_pos.x + window_size.x - padding_x - icons_total_width;
+
+    // Draw vertical separator before icons
+    float separator_x = icons_x - 8.0f;
+    draw_list->AddLine(
+        ImVec2(separator_x, status_y + 4.0f),
+        ImVec2(separator_x, status_y + status_height - 4.0f),
+        IM_COL32(60, 60, 60, 255), 1.0f);
+
+    // Draw monitor icons
+    for (size_t i = 0; i < monitor_count; ++i) {
+        ImVec2 icon_pos(icons_x + i * (icon_size + icon_padding), content_y);
+        drawMonitorIcon(draw_list, icon_pos, icon_size, gamma_active);
+    }
+
+    // Set cursor position for invisible button (for tooltip interaction on icons)
+    ImGui::SetCursorScreenPos(ImVec2(icons_x, content_y));
+    float icons_width = (monitor_count > 0) ? icons_total_width : 1.0f;
+    ImGui::InvisibleButton("##MonitorStatus", ImVec2(icons_width, icon_size));
+
+    if (ImGui::IsItemHovered()) {
+        if (gamma_active) {
+            ImGui::SetTooltip("Applied to %zu display%s", monitor_count, monitor_count == 1 ? "" : "s");
+        } else {
+            ImGui::SetTooltip("Gamma disabled (%zu display%s)", monitor_count, monitor_count == 1 ? "" : "s");
+        }
+    }
+}
+
 void MainWindow::renderGammaTab(App& app)
 {
-    ImGui::Spacing();
-
-    // System-wide effect banner
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(60, 50, 30, 255));
-    ImGui::BeginChild("##Banner", ImVec2(-1, 36), true);
-    ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.6f, 1.0f), "GPU output curve - affects entire desktop system-wide");
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
-
     ImGui::Spacing();
 
     // Tone curve preset selector
@@ -899,16 +1023,6 @@ void MainWindow::renderGammaTab(App& app)
 
     // Reserve space for the entire canvas (including margins)
     ImGui::Dummy(total_canvas_size);
-
-    ImGui::Spacing();
-
-    // Hotkey hint
-    ImGui::TextDisabled("Global hotkeys available (customize in Edit > Settings)");
-
-    // Status at bottom
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::TextDisabled("%s", app.getStatusText());
 }
 
 void MainWindow::renderHelpTab()

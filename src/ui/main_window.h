@@ -32,6 +32,7 @@ public:
 
 private:
     void renderMenuBar();
+    void renderStatusBar(App& app);
     void renderGammaTab(App& app);
     void renderHelpTab();
     void renderAboutTab();

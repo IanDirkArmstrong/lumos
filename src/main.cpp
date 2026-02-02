@@ -298,6 +298,14 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         return 0;
 
+    case WM_GETMINMAXINFO:
+        {
+            LPMINMAXINFO lpMMI = reinterpret_cast<LPMINMAXINFO>(lParam);
+            lpMMI->ptMinTrackSize.x = 340;  // Minimum width
+            lpMMI->ptMinTrackSize.y = 400;  // Minimum height
+        }
+        return 0;
+
     case WM_SYSCOMMAND:
         // Minimize to tray instead of taskbar
         if ((wParam & 0xfff0) == SC_MINIMIZE) {
