@@ -58,6 +58,7 @@ void Tray::showMenu()
     AppendMenuW(menu, MF_STRING, ID_HELP, L"Help");
     AppendMenuW(menu, MF_STRING, ID_ABOUT, L"About");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, ID_CLOSE_TO_TRAY, L"Close to Tray");
     AppendMenuW(menu, MF_STRING, ID_EXIT, L"Exit");
 
     // Required for menu to work properly from tray
@@ -84,6 +85,9 @@ void Tray::showMenu()
         break;
     case ID_ABOUT:
         if (on_about) on_about();
+        break;
+    case ID_CLOSE_TO_TRAY:
+        if (on_close_to_tray) on_close_to_tray();
         break;
     case ID_EXIT:
         if (on_exit) on_exit();

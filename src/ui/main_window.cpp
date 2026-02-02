@@ -51,7 +51,7 @@ void MainWindow::render(App& app)
     ImGui::Begin("##MainWindow", nullptr, flags);
 
     // Render menu bar
-    renderMenuBar();
+    renderMenuBar(app);
 
     // Calculate content area height (excluding status bar)
     const float status_bar_height = 24.0f;
@@ -114,13 +114,17 @@ void MainWindow::render(App& app)
     }
 }
 
-void MainWindow::renderMenuBar()
+void MainWindow::renderMenuBar(App& app)
 {
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("Close to Tray")) {
+                // Hide window to tray
+                app.hideWindow();
+            }
             if (ImGui::MenuItem("Exit")) {
-                // Request exit via WM_CLOSE
-                PostMessageW(GetActiveWindow(), WM_CLOSE, 0, 0);
+                // Request actual exit
+                app.requestExit();
             }
             ImGui::EndMenu();
         }
@@ -1279,6 +1283,23 @@ void MainWindow::renderSettingsTab(App& app)
     ImGui::Checkbox("Show Histogram", &show_histogram_);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("Shows screen luminance distribution in the curve preview");
+    }
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::TextUnformatted("Window Behavior");
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    bool minimize_to_tray = app.getMinimizeToTrayOnClose();
+    if (ImGui::Checkbox("Minimize to system tray when closed", &minimize_to_tray)) {
+        app.setMinimizeToTrayOnClose(minimize_to_tray);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("When enabled, closing the window minimizes to tray instead of exiting");
     }
 
     ImGui::Spacing();

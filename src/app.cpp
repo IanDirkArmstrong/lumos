@@ -76,6 +76,7 @@ bool App::initialize(HWND hwnd, UINT tray_msg)
     tray_.on_reset = [this]() { resetGamma(); };
     tray_.on_help = [this]() { showHelp(); };
     tray_.on_about = [this]() { showAbout(); };
+    tray_.on_close_to_tray = [this]() { hideWindow(); };
     tray_.on_exit = [this]() { requestExit(); };
 
     // Initialize hotkeys with config bindings

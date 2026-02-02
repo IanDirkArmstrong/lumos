@@ -317,8 +317,8 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         break;
 
     case WM_CLOSE:
-        // Hide to tray instead of closing (unless exit requested)
-        if (g_app && !g_app->shouldExit()) {
+        // Hide to tray instead of closing (if enabled and not exit requested)
+        if (g_app && !g_app->shouldExit() && g_app->getMinimizeToTrayOnClose()) {
             g_app->hideWindow();
             return 0;
         }

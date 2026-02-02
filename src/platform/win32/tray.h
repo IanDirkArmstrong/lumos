@@ -36,6 +36,7 @@ public:
     std::function<void()> on_reset;
     std::function<void()> on_help;
     std::function<void()> on_about;
+    std::function<void()> on_close_to_tray;
     std::function<void()> on_exit;
 
     // Menu item IDs
@@ -43,7 +44,8 @@ public:
     static constexpr UINT ID_RESET = 1002;
     static constexpr UINT ID_HELP = 1003;
     static constexpr UINT ID_ABOUT = 1004;
-    static constexpr UINT ID_EXIT = 1005;
+    static constexpr UINT ID_CLOSE_TO_TRAY = 1005;
+    static constexpr UINT ID_EXIT = 1006;
 
 private:
     HWND hwnd_ = nullptr;

@@ -31,7 +31,7 @@ public:
     void openTestPattern() { show_test_pattern_window_ = true; }
 
 private:
-    void renderMenuBar();
+    void renderMenuBar(App& app);
     void renderStatusBar(App& app);
     void renderGammaTab(App& app);
     void renderHelpTab();

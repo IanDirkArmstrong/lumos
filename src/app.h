@@ -100,6 +100,10 @@ public:
     void toggleGamma();
     bool isGammaEnabled() const { return gamma_enabled_; }
 
+    // Window behavior settings
+    bool getMinimizeToTrayOnClose() const { return config_.minimize_to_tray_on_close; }
+    void setMinimizeToTrayOnClose(bool value) { config_.minimize_to_tray_on_close = value; }
+
     // Get monitor count
     size_t getMonitorCount() const { return gamma_.getMonitorCount(); }
 

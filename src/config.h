@@ -72,6 +72,9 @@ public:
     HotkeyBinding hotkey_reset = { MOD_CONTROL | MOD_ALT, 'R' };
     HotkeyBinding hotkey_toggle = { MOD_CONTROL | MOD_ALT, 'G' };
 
+    // Window behavior
+    bool minimize_to_tray_on_close = true;
+
 private:
     std::filesystem::path getConfigDir();
     std::filesystem::path getConfigPath();

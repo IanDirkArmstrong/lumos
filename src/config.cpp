@@ -250,6 +250,11 @@ bool Config::load()
         else if (line.starts_with("Toggle=")) {
             HotkeyUtils::stringToBinding(line.substr(7), hotkey_toggle);
         }
+        // Window behavior
+        else if (line.starts_with("MinimizeToTrayOnClose=")) {
+            std::string val = line.substr(22);
+            minimize_to_tray_on_close = (val == "1" || val == "true");
+        }
     }
 
     return true;
@@ -288,6 +293,10 @@ bool Config::save()
     file << "Decrease=" << HotkeyUtils::bindingToString(hotkey_decrease) << "\n";
     file << "Reset=" << HotkeyUtils::bindingToString(hotkey_reset) << "\n";
     file << "Toggle=" << HotkeyUtils::bindingToString(hotkey_toggle) << "\n";
+
+    file << "\n";
+    file << "[Window]\n";
+    file << "MinimizeToTrayOnClose=" << (minimize_to_tray_on_close ? "1" : "0") << "\n";
 
     return true;
 }
