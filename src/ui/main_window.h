@@ -9,6 +9,9 @@
 #include "../platform/win32/gamma.h"
 #include "../config.h"
 
+struct ID3D11Device;
+struct ID3D11ShaderResourceView;
+
 namespace lumos {
 class App;
 }
@@ -18,6 +21,10 @@ namespace lumos::ui {
 class MainWindow {
 public:
     MainWindow() = default;
+    ~MainWindow();
+
+    // Initialize icon textures (call after ImGui D3D11 init)
+    void initIconTextures(ID3D11Device* device);
 
     // Render the window (call each frame)
     void render(App& app);
@@ -76,6 +83,10 @@ private:
 
     // Separate window visibility
     bool show_test_pattern_window_ = false;
+
+    // Icon textures for status bar
+    ID3D11ShaderResourceView* bolt_texture_ = nullptr;
+    ID3D11ShaderResourceView* bolt_slash_texture_ = nullptr;
 };
 
 } // namespace lumos::ui

@@ -150,6 +150,7 @@ int WINAPI WinMain(
 
     // UI
     lumos::ui::MainWindow main_window;
+    main_window.initIconTextures(g_pd3dDevice);
 
     // Connect app dialog callbacks to main window
     app.on_show_help = [&main_window]() { main_window.openHelp(); };

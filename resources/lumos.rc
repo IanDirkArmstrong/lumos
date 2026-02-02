@@ -5,6 +5,8 @@
 // Application icons
 IDI_LUMOS ICON "icon.ico"
 IDI_GEARS ICON "gears.ico"
+IDI_BOLT ICON "bolt.ico"
+IDI_BOLT_SLASH ICON "bolt-slash.ico"
 
 // Version info
 VS_VERSION_INFO VERSIONINFO

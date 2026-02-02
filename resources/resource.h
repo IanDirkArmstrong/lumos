@@ -7,3 +7,5 @@
 // Application icons
 #define IDI_LUMOS 101
 #define IDI_GEARS 102
+#define IDI_BOLT 103
+#define IDI_BOLT_SLASH 104

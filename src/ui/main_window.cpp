@@ -2,8 +2,19 @@
 // Copyright (C) 2026 Ian Dirk Armstrong
 // License: GPL v2
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <windows.h>
+#include <d3d11.h>
+
 #include "main_window.h"
 #include "../app.h"
+#include "../../resources/resource.h"
 #include "imgui.h"
 #include "implot.h"
 #include <algorithm>
@@ -12,6 +23,141 @@
 #include <vector>
 
 namespace lumos::ui {
+
+MainWindow::~MainWindow()
+{
+    if (bolt_texture_) {
+        bolt_texture_->Release();
+        bolt_texture_ = nullptr;
+    }
+    if (bolt_slash_texture_) {
+        bolt_slash_texture_->Release();
+        bolt_slash_texture_ = nullptr;
+    }
+}
+
+// Helper to create a D3D11 texture from an HICON
+static ID3D11ShaderResourceView* CreateTextureFromIcon(ID3D11Device* device, HICON hIcon, int size)
+{
+    if (!hIcon || !device) return nullptr;
+
+    // Get icon info
+    ICONINFO iconInfo = {};
+    if (!GetIconInfo(hIcon, &iconInfo)) return nullptr;
+
+    // Get bitmap info
+    BITMAP bm = {};
+    GetObject(iconInfo.hbmColor ? iconInfo.hbmColor : iconInfo.hbmMask, sizeof(bm), &bm);
+
+    int width = bm.bmWidth;
+    int height = bm.bmHeight;
+    if (width <= 0 || height <= 0) {
+        if (iconInfo.hbmColor) DeleteObject(iconInfo.hbmColor);
+        if (iconInfo.hbmMask) DeleteObject(iconInfo.hbmMask);
+        return nullptr;
+    }
+
+    // Create a compatible DC and bitmap to extract pixels
+    HDC hdcScreen = GetDC(nullptr);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = width;
+    bi.bmiHeader.biHeight = -height; // Top-down
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP hBitmap = CreateDIBSection(hdcMem, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+
+    if (hBitmap && bits) {
+        HGDIOBJ oldBitmap = SelectObject(hdcMem, hBitmap);
+        DrawIconEx(hdcMem, 0, 0, hIcon, width, height, 0, nullptr, DI_NORMAL);
+        SelectObject(hdcMem, oldBitmap);
+
+        // Convert BGRA to RGBA and invert colors for dark mode
+        unsigned char* pixels = static_cast<unsigned char*>(bits);
+        for (int i = 0; i < width * height; ++i) {
+            unsigned char b = pixels[i * 4 + 0];
+            unsigned char g = pixels[i * 4 + 1];
+            unsigned char r = pixels[i * 4 + 2];
+            unsigned char a = pixels[i * 4 + 3];
+
+            // Invert RGB for dark mode (black icon -> white icon)
+            pixels[i * 4 + 0] = 255 - r;  // R
+            pixels[i * 4 + 1] = 255 - g;  // G
+            pixels[i * 4 + 2] = 255 - b;  // B
+            pixels[i * 4 + 3] = a;        // A
+        }
+
+        // Create D3D11 texture
+        D3D11_TEXTURE2D_DESC desc = {};
+        desc.Width = width;
+        desc.Height = height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+        D3D11_SUBRESOURCE_DATA initData = {};
+        initData.pSysMem = pixels;
+        initData.SysMemPitch = width * 4;
+
+        ID3D11Texture2D* texture = nullptr;
+        HRESULT hr = device->CreateTexture2D(&desc, &initData, &texture);
+
+        ID3D11ShaderResourceView* srv = nullptr;
+        if (SUCCEEDED(hr) && texture) {
+            D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+            srvDesc.Format = desc.Format;
+            srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+            srvDesc.Texture2D.MipLevels = 1;
+
+            device->CreateShaderResourceView(texture, &srvDesc, &srv);
+            texture->Release();
+        }
+
+        DeleteObject(hBitmap);
+        DeleteDC(hdcMem);
+        ReleaseDC(nullptr, hdcScreen);
+
+        if (iconInfo.hbmColor) DeleteObject(iconInfo.hbmColor);
+        if (iconInfo.hbmMask) DeleteObject(iconInfo.hbmMask);
+
+        return srv;
+    }
+
+    DeleteDC(hdcMem);
+    ReleaseDC(nullptr, hdcScreen);
+    if (iconInfo.hbmColor) DeleteObject(iconInfo.hbmColor);
+    if (iconInfo.hbmMask) DeleteObject(iconInfo.hbmMask);
+
+    return nullptr;
+}
+
+void MainWindow::initIconTextures(ID3D11Device* device)
+{
+    HINSTANCE hInstance = GetModuleHandleW(nullptr);
+
+    // Load 16x16 icons
+    HICON hBolt = static_cast<HICON>(LoadImageW(
+        hInstance, MAKEINTRESOURCEW(IDI_BOLT), IMAGE_ICON, 16, 16, LR_DEFAULTCOLOR));
+    HICON hBoltSlash = static_cast<HICON>(LoadImageW(
+        hInstance, MAKEINTRESOURCEW(IDI_BOLT_SLASH), IMAGE_ICON, 16, 16, LR_DEFAULTCOLOR));
+
+    if (hBolt) {
+        bolt_texture_ = CreateTextureFromIcon(device, hBolt, 16);
+        DestroyIcon(hBolt);
+    }
+    if (hBoltSlash) {
+        bolt_slash_texture_ = CreateTextureFromIcon(device, hBoltSlash, 16);
+        DestroyIcon(hBoltSlash);
+    }
+}
 
 void MainWindow::render(App& app)
 {
@@ -158,53 +304,6 @@ void MainWindow::renderMenuBar(App& app)
     }
 }
 
-static void drawMonitorIcon(ImDrawList* draw_list, ImVec2 pos, float size, bool active)
-{
-    // Colors - outline style (active = green outline, inactive = gray outline)
-    ImU32 outline_color = active ? IM_COL32(100, 200, 120, 255) : IM_COL32(120, 120, 120, 255);
-    float thickness = 1.5f;
-
-    // Monitor body (outer rectangle) - outline only
-    float body_width = size * 0.85f;
-    float body_height = size * 0.6f;
-    float body_x = pos.x + (size - body_width) * 0.5f;
-    float body_y = pos.y;
-
-    draw_list->AddRect(
-        ImVec2(body_x, body_y),
-        ImVec2(body_x + body_width, body_y + body_height),
-        outline_color, 2.0f, 0, thickness);
-
-    // Screen (inner rectangle) - outline only
-    float screen_margin = size * 0.1f;
-    draw_list->AddRect(
-        ImVec2(body_x + screen_margin, body_y + screen_margin),
-        ImVec2(body_x + body_width - screen_margin, body_y + body_height - screen_margin),
-        outline_color, 1.0f, 0, thickness * 0.7f);
-
-    // Stand neck - filled (small detail)
-    float neck_width = size * 0.12f;
-    float neck_height = size * 0.1f;
-    float neck_x = pos.x + (size - neck_width) * 0.5f;
-    float neck_y = body_y + body_height;
-
-    draw_list->AddRectFilled(
-        ImVec2(neck_x, neck_y),
-        ImVec2(neck_x + neck_width, neck_y + neck_height),
-        outline_color);
-
-    // Stand base - outline
-    float base_width = size * 0.35f;
-    float base_height = size * 0.06f;
-    float base_x = pos.x + (size - base_width) * 0.5f;
-    float base_y = neck_y + neck_height;
-
-    draw_list->AddRectFilled(
-        ImVec2(base_x, base_y),
-        ImVec2(base_x + base_width, base_y + base_height),
-        outline_color, 1.0f);
-}
-
 void MainWindow::renderStatusBar(App& app)
 {
     // Position status bar at the bottom of the window
@@ -246,36 +345,41 @@ void MainWindow::renderStatusBar(App& app)
     float text_y = status_y + (status_height - ImGui::GetTextLineHeight()) * 0.5f;
     draw_list->AddText(ImVec2(text_x, text_y), IM_COL32(180, 180, 180, 255), preset_name);
 
-    // Monitor icons on the right
-    size_t monitor_count = app.getMonitorCount();
+    // Power icon on the right (clickable to toggle gamma)
     bool gamma_active = app.isGammaEnabled();
-    float icons_total_width = monitor_count * (icon_size + icon_padding) - icon_padding;
-    float icons_x = window_pos.x + window_size.x - padding_x - icons_total_width;
+    float icon_x = window_pos.x + window_size.x - padding_x - icon_size;
 
-    // Draw vertical separator before icons
-    float separator_x = icons_x - 8.0f;
+    // Draw vertical separator before icon
+    float separator_x = icon_x - 8.0f;
     draw_list->AddLine(
         ImVec2(separator_x, status_y + 4.0f),
         ImVec2(separator_x, status_y + status_height - 4.0f),
         IM_COL32(60, 60, 60, 255), 1.0f);
 
-    // Draw monitor icons
-    for (size_t i = 0; i < monitor_count; ++i) {
-        ImVec2 icon_pos(icons_x + i * (icon_size + icon_padding), content_y);
-        drawMonitorIcon(draw_list, icon_pos, icon_size, gamma_active);
+    // Draw power icon using texture
+    ImVec2 icon_pos(icon_x, content_y);
+    ID3D11ShaderResourceView* icon_texture = gamma_active ? bolt_texture_ : bolt_slash_texture_;
+    if (icon_texture) {
+        // Tint: green when active, gray when inactive
+        ImU32 tint = gamma_active ? IM_COL32(100, 200, 120, 255) : IM_COL32(150, 150, 150, 255);
+        draw_list->AddImage(
+            reinterpret_cast<ImTextureID>(icon_texture),
+            icon_pos,
+            ImVec2(icon_pos.x + icon_size, icon_pos.y + icon_size),
+            ImVec2(0, 0), ImVec2(1, 1),
+            tint);
     }
 
-    // Set cursor position for invisible button (for tooltip interaction on icons)
-    ImGui::SetCursorScreenPos(ImVec2(icons_x, content_y));
-    float icons_width = (monitor_count > 0) ? icons_total_width : 1.0f;
-    ImGui::InvisibleButton("##MonitorStatus", ImVec2(icons_width, icon_size));
+    // Set cursor position for invisible button (clickable + tooltip)
+    ImGui::SetCursorScreenPos(icon_pos);
+    ImGui::InvisibleButton("##PowerToggle", ImVec2(icon_size, icon_size));
+
+    if (ImGui::IsItemClicked()) {
+        app.toggleGamma();
+    }
 
     if (ImGui::IsItemHovered()) {
-        if (gamma_active) {
-            ImGui::SetTooltip("Applied to %zu display%s", monitor_count, monitor_count == 1 ? "" : "s");
-        } else {
-            ImGui::SetTooltip("Gamma disabled (%zu display%s)", monitor_count, monitor_count == 1 ? "" : "s");
-        }
+        ImGui::SetTooltip(gamma_active ? "Click to disable gamma" : "Click to enable gamma");
     }
 }
 
