@@ -46,6 +46,8 @@ void MainWindow::render(App& app)
         ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoCollapse |
         ImGuiWindowFlags_NoBringToFrontOnFocus |
+        ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoScrollWithMouse |
         ImGuiWindowFlags_MenuBar;
 
     ImGui::Begin("##MainWindow", nullptr, flags);
@@ -57,9 +59,8 @@ void MainWindow::render(App& app)
     const float status_bar_height = 24.0f;
     float content_height = ImGui::GetContentRegionAvail().y - status_bar_height;
 
-    // Content area child window (to prevent overlap with status bar)
-    ImGuiWindowFlags child_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
-    if (ImGui::BeginChild("##ContentArea", ImVec2(0, content_height), false, child_flags)) {
+    // Content area child window (scrollable, but status bar stays fixed below)
+    if (ImGui::BeginChild("##ContentArea", ImVec2(0, content_height), false, ImGuiWindowFlags_None)) {
         // Render tab bar
         if (ImGui::BeginTabBar("MainTabBar", ImGuiTabBarFlags_None)) {
             // Gamma control tab (always visible, not closable)
