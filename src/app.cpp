@@ -9,25 +9,29 @@
 namespace lumos {
 
 namespace {
-// Helper function to convert string to TransferFunction enum
-platform::TransferFunction stringToTransferFunction(const std::string& str) {
-    if (str == "sRGB") return platform::TransferFunction::sRGB;
-    if (str == "Rec709") return platform::TransferFunction::Rec709;
-    if (str == "Rec2020") return platform::TransferFunction::Rec2020;
-    if (str == "DCIP3") return platform::TransferFunction::DCIP3;
-    if (str == "Custom") return platform::TransferFunction::Custom;
-    return platform::TransferFunction::Power;  // default
+// Helper function to convert config string to ToneCurve enum
+platform::ToneCurve stringToToneCurve(const std::string& str) {
+    if (str == "Linear") return platform::ToneCurve::Linear;
+    if (str == "ShadowLift") return platform::ToneCurve::ShadowLift;
+    if (str == "SoftContrast") return platform::ToneCurve::SoftContrast;
+    if (str == "Cinema") return platform::ToneCurve::Cinema;
+    if (str == "Custom") return platform::ToneCurve::Custom;
+    // Legacy config migration
+    if (str == "sRGB") return platform::ToneCurve::ShadowLift;
+    if (str == "Rec709" || str == "Rec2020") return platform::ToneCurve::SoftContrast;
+    if (str == "DCIP3") return platform::ToneCurve::Cinema;
+    return platform::ToneCurve::Power;  // default
 }
 
-// Helper function to convert TransferFunction enum to string
-std::string transferFunctionToString(platform::TransferFunction func) {
-    switch (func) {
-        case platform::TransferFunction::sRGB: return "sRGB";
-        case platform::TransferFunction::Rec709: return "Rec709";
-        case platform::TransferFunction::Rec2020: return "Rec2020";
-        case platform::TransferFunction::DCIP3: return "DCIP3";
-        case platform::TransferFunction::Custom: return "Custom";
-        case platform::TransferFunction::Power:
+// Helper function to convert ToneCurve enum to config string
+std::string toneCurveToString(platform::ToneCurve curve) {
+    switch (curve) {
+        case platform::ToneCurve::Linear: return "Linear";
+        case platform::ToneCurve::ShadowLift: return "ShadowLift";
+        case platform::ToneCurve::SoftContrast: return "SoftContrast";
+        case platform::ToneCurve::Cinema: return "Cinema";
+        case platform::ToneCurve::Custom: return "Custom";
+        case platform::ToneCurve::Power:
         default: return "Power";
     }
 }
@@ -40,7 +44,7 @@ bool App::initialize(HWND hwnd, UINT tray_msg)
     // Load config
     config_.load();
     current_gamma_ = config_.last_gamma;
-    transfer_function_ = stringToTransferFunction(config_.transfer_function);
+    tone_curve_ = stringToToneCurve(config_.transfer_function);
     custom_curve_points_ = config_.custom_curve_points;
 
     // Ensure custom curve has valid default if empty
@@ -53,12 +57,12 @@ bool App::initialize(HWND hwnd, UINT tray_msg)
         std::snprintf(status_text_, sizeof(status_text_), "Warning: Could not initialize gamma");
     }
 
-    // Apply saved gamma to all monitors
-    if (current_gamma_ != 1.0 || transfer_function_ != platform::TransferFunction::Power) {
-        if (transfer_function_ == platform::TransferFunction::Custom) {
-            gamma_.applyAll(transfer_function_, current_gamma_, &custom_curve_points_);
+    // Apply saved tone curve to all monitors
+    if (current_gamma_ != 1.0 || tone_curve_ != platform::ToneCurve::Power) {
+        if (tone_curve_ == platform::ToneCurve::Custom) {
+            gamma_.applyAll(tone_curve_, current_gamma_, &custom_curve_points_);
         } else {
-            gamma_.applyAll(transfer_function_, current_gamma_);
+            gamma_.applyAll(tone_curve_, current_gamma_);
         }
     }
 
@@ -84,6 +88,9 @@ bool App::initialize(HWND hwnd, UINT tray_msg)
     hotkeys_.on_decrease = [this]() { adjustGamma(-GAMMA_STEP); };
     hotkeys_.on_reset = [this]() { resetGamma(); };
 
+    // Start screen histogram capture
+    histogram_.start();
+
     size_t count = gamma_.getMonitorCount();
     std::snprintf(status_text_, sizeof(status_text_), "Applied to %zu display%s",
                   count, count == 1 ? "" : "s");
@@ -92,12 +99,15 @@ bool App::initialize(HWND hwnd, UINT tray_msg)
 
 void App::shutdown()
 {
+    // Stop screen histogram capture
+    histogram_.stop();
+
     // Shutdown hotkeys
     hotkeys_.shutdown();
 
     // Save config
     config_.last_gamma = current_gamma_;
-    config_.transfer_function = transferFunctionToString(transfer_function_);
+    config_.transfer_function = toneCurveToString(tone_curve_);
     config_.custom_curve_points = custom_curve_points_;
     config_.save();
 
@@ -114,10 +124,10 @@ void App::setGamma(double value)
     current_gamma_ = value;
 
     bool success;
-    if (transfer_function_ == platform::TransferFunction::Custom) {
-        success = gamma_.applyAll(transfer_function_, value, &custom_curve_points_);
+    if (tone_curve_ == platform::ToneCurve::Custom) {
+        success = gamma_.applyAll(tone_curve_, value, &custom_curve_points_);
     } else {
-        success = gamma_.applyAll(transfer_function_, value);
+        success = gamma_.applyAll(tone_curve_, value);
     }
 
     if (success) {
@@ -129,10 +139,10 @@ void App::setGamma(double value)
     }
 }
 
-void App::setTransferFunction(platform::TransferFunction func)
+void App::setToneCurve(platform::ToneCurve curve)
 {
-    transfer_function_ = func;
-    // Reapply current gamma with new transfer function
+    tone_curve_ = curve;
+    // Reapply current strength with new tone curve
     setGamma(current_gamma_);
 }
 
@@ -146,14 +156,14 @@ void App::resetGamma()
     current_gamma_ = 1.0;
 
     if (gamma_.restoreAll()) {
-        std::snprintf(status_text_, sizeof(status_text_), "Reset to original");
+        std::snprintf(status_text_, sizeof(status_text_), "Restored captured defaults");
     } else {
-        if (transfer_function_ == platform::TransferFunction::Custom) {
-            gamma_.applyAll(transfer_function_, 1.0, &custom_curve_points_);
+        if (tone_curve_ == platform::ToneCurve::Custom) {
+            gamma_.applyAll(tone_curve_, 1.0, &custom_curve_points_);
         } else {
-            gamma_.applyAll(transfer_function_, 1.0);
+            gamma_.applyAll(tone_curve_, 1.0);
         }
-        std::snprintf(status_text_, sizeof(status_text_), "Reset to default (1.0)");
+        std::snprintf(status_text_, sizeof(status_text_), "Reset to linear");
     }
 }
 
@@ -162,7 +172,7 @@ void App::setCustomCurvePoints(const std::vector<platform::CurvePoint>& points)
     custom_curve_points_ = points;
 
     // If we're currently in Custom mode, reapply immediately
-    if (transfer_function_ == platform::TransferFunction::Custom) {
+    if (tone_curve_ == platform::ToneCurve::Custom) {
         setGamma(current_gamma_);
     }
 }

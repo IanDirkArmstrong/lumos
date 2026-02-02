@@ -5,8 +5,11 @@
 #include "main_window.h"
 #include "../app.h"
 #include "imgui.h"
+#include "implot.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <vector>
 
 namespace lumos::ui {
 
@@ -18,16 +21,16 @@ void MainWindow::render(App& app)
     if (!ImGui::IsAnyItemActive() || first_frame_) {
         gamma_slider_ = current_gamma;
 
-        // Sync transfer function dropdown with app state
-        using TF = lumos::platform::TransferFunction;
-        TF current_tf = app.getTransferFunction();
-        switch (current_tf) {
-            case TF::Power: transfer_function_index_ = 0; break;
-            case TF::sRGB: transfer_function_index_ = 1; break;
-            case TF::Rec709:
-            case TF::Rec2020: transfer_function_index_ = 2; break;
-            case TF::DCIP3: transfer_function_index_ = 3; break;
-            case TF::Custom: transfer_function_index_ = 4; break;
+        // Sync tone curve dropdown with app state
+        using TC = lumos::platform::ToneCurve;
+        TC current_tc = app.getToneCurve();
+        switch (current_tc) {
+            case TC::Linear: transfer_function_index_ = 0; break;
+            case TC::Power: transfer_function_index_ = 1; break;
+            case TC::ShadowLift: transfer_function_index_ = 2; break;
+            case TC::SoftContrast: transfer_function_index_ = 3; break;
+            case TC::Cinema: transfer_function_index_ = 4; break;
+            case TC::Custom: transfer_function_index_ = 5; break;
         }
     }
     first_frame_ = false;
@@ -118,50 +121,61 @@ void MainWindow::renderGammaTab(App& app)
 {
     ImGui::Spacing();
 
-    // Transfer function selector
-    ImGui::TextUnformatted("Transfer Function");
-    const char* transfer_functions[] = {
-        "Power (Custom Gamma)",
-        "sRGB",
-        "Rec.709 / Rec.2020",
-        "DCI-P3 (Gamma 2.6)",
+    // System-wide effect banner
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(60, 50, 30, 255));
+    ImGui::BeginChild("##Banner", ImVec2(-1, 36), true);
+    ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.6f, 1.0f), "GPU output curve - affects entire desktop system-wide");
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+
+    ImGui::Spacing();
+
+    // Tone curve preset selector
+    ImGui::TextUnformatted("Tone Curve Preset");
+    const char* tone_curves[] = {
+        "Neutral (Identity)",
+        "Simple Gamma",
+        "Shadow Lift",
+        "Soft Contrast",
+        "Cinema (Gamma 2.6)",
         "Custom (Edit Curve)"
     };
 
     ImGui::SetNextItemWidth(-1);
-    if (ImGui::Combo("##TransferFunc", &transfer_function_index_, transfer_functions, IM_ARRAYSIZE(transfer_functions))) {
-        // Map index to TransferFunction enum
-        using TF = lumos::platform::TransferFunction;
-        TF func;
+    if (ImGui::Combo("##ToneCurve", &transfer_function_index_, tone_curves, IM_ARRAYSIZE(tone_curves))) {
+        // Map index to ToneCurve enum
+        using TC = lumos::platform::ToneCurve;
+        TC curve;
         switch (transfer_function_index_) {
-            case 1: func = TF::sRGB; break;
-            case 2: func = TF::Rec709; break;
-            case 3: func = TF::DCIP3; break;
-            case 4: func = TF::Custom; break;
-            case 0:
-            default: func = TF::Power; break;
+            case 0: curve = TC::Linear; break;
+            case 2: curve = TC::ShadowLift; break;
+            case 3: curve = TC::SoftContrast; break;
+            case 4: curve = TC::Cinema; break;
+            case 5: curve = TC::Custom; break;
+            case 1:
+            default: curve = TC::Power; break;
         }
-        app.setTransferFunction(func);
+        app.setToneCurve(curve);
 
         // Initialize UI curve points when switching to Custom mode
-        if (func == TF::Custom && ui_curve_points_.empty()) {
+        if (curve == TC::Custom && ui_curve_points_.empty()) {
             ui_curve_points_ = app.getCustomCurvePoints();
         }
     }
 
     ImGui::Spacing();
 
-    // Gamma slider (only enabled for Power mode, disabled for preset and custom modes)
-    bool is_power_mode = (transfer_function_index_ == 0);
-    bool is_custom_mode = (transfer_function_index_ == 4);
+    // Curve strength slider (only enabled for Simple Gamma mode)
+    bool is_power_mode = (transfer_function_index_ == 1);  // Simple Gamma
+    bool is_custom_mode = (transfer_function_index_ == 5); // Custom
 
     if (!is_power_mode) {
         ImGui::BeginDisabled();
     }
 
-    ImGui::TextUnformatted("Gamma");
+    ImGui::TextUnformatted("Curve Strength");
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Absolute gamma value (not relative)");
+        ImGui::SetTooltip("Controls the power-law exponent (only applies to Simple Gamma preset)");
     }
     ImGui::SetNextItemWidth(-1);
     bool slider_changed = ImGui::SliderFloat("##Gamma", &gamma_slider_, 0.1f, 9.0f, "%.2f");
@@ -259,9 +273,14 @@ void MainWindow::renderGammaTab(App& app)
         ImGui::Spacing();
     }
 
-    // Gamma curve visualization
+    // Tone curve visualization
     ImGui::Spacing();
-    ImGui::TextUnformatted("Gamma Curve");
+    ImGui::TextUnformatted("Output Curve Preview");
+    ImGui::SameLine();
+    ImGui::Checkbox("Show Histogram", &show_histogram_);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Shows screen luminance distribution as background");
+    }
 
     // Draw area for the curve (with margins for axis labels)
     const float total_height = 200.0f;
@@ -336,8 +355,8 @@ void MainWindow::renderGammaTab(App& app)
     }
 
     // Axis labels
-    const char* x_label = "Encoded Signal";
-    const char* y_label = "Luminance";
+    const char* x_label = "Input (0-1)";
+    const char* y_label = "Output (0-1)";
     ImVec2 x_label_size = ImGui::CalcTextSize(x_label);
 
     // X-axis label (centered below graph)
@@ -379,13 +398,74 @@ void MainWindow::renderGammaTab(App& app)
         }
     }
 
+    // Draw screen histogram as background (if enabled)
+    if (show_histogram_) {
+        auto histogram = app.getScreenHistogram();
+        if (histogram.valid) {
+            // Copy histogram data for display
+            for (int i = 0; i < 256; ++i) {
+                histogram_xs_[i] = i / 255.0f;
+                histogram_ys_[i] = histogram.luminance[i];
+            }
+
+            // Draw histogram bars
+            float bar_width = canvas_size.x / 256.0f;
+            for (int i = 0; i < 256; ++i) {
+                float bar_height = histogram_ys_[i] * canvas_size.y * 0.8f;  // Scale to 80% of height
+                float bar_x = canvas_pos.x + histogram_xs_[i] * canvas_size.x;
+                float bar_y_top = canvas_pos.y + canvas_size.y - bar_height;
+                float bar_y_bottom = canvas_pos.y + canvas_size.y;
+
+                // Semi-transparent blue bars
+                draw_list->AddRectFilled(
+                    ImVec2(bar_x, bar_y_top),
+                    ImVec2(bar_x + bar_width, bar_y_bottom),
+                    IM_COL32(60, 80, 120, 80));
+            }
+        }
+    }
+
     // Draw linear reference line (gamma = 1.0)
     draw_list->AddLine(
         canvas_pos,
         ImVec2(canvas_pos.x + canvas_size.x, canvas_pos.y + canvas_size.y),
         IM_COL32(80, 80, 80, 255), 1.5f);
 
-    // Draw gamma curve
+    // Draw Windows API valid zone (50-150% of identity) - only in Custom mode
+    if (is_custom_mode) {
+        // Build polygon for the valid zone
+        std::vector<ImVec2> valid_zone_top;
+        std::vector<ImVec2> valid_zone_bottom;
+
+        for (int i = 0; i <= 64; ++i) {
+            double x_norm = i / 64.0;
+            double min_y = x_norm * 0.5;
+            double max_y = (std::min)(1.0, x_norm * 1.5 + 0.05);
+
+            float px = canvas_pos.x + static_cast<float>(x_norm) * canvas_size.x;
+            float py_min = canvas_pos.y + canvas_size.y - static_cast<float>(min_y) * canvas_size.y;
+            float py_max = canvas_pos.y + canvas_size.y - static_cast<float>(max_y) * canvas_size.y;
+
+            valid_zone_top.push_back(ImVec2(px, py_max));
+            valid_zone_bottom.push_back(ImVec2(px, py_min));
+        }
+
+        // Draw as filled quad strips (valid zone in green tint)
+        for (size_t i = 0; i < valid_zone_top.size() - 1; ++i) {
+            draw_list->AddQuadFilled(
+                valid_zone_top[i], valid_zone_top[i + 1],
+                valid_zone_bottom[i + 1], valid_zone_bottom[i],
+                IM_COL32(50, 80, 50, 40));
+        }
+
+        // Draw boundary lines for the valid zone
+        for (size_t i = 0; i < valid_zone_top.size() - 1; ++i) {
+            draw_list->AddLine(valid_zone_top[i], valid_zone_top[i + 1], IM_COL32(80, 120, 80, 100), 1.0f);
+            draw_list->AddLine(valid_zone_bottom[i], valid_zone_bottom[i + 1], IM_COL32(80, 120, 80, 100), 1.0f);
+        }
+    }
+
+    // Draw tone curve
     const double gamma = static_cast<double>(gamma_slider_);
 
     // Calculate the starting point at x=0
@@ -410,7 +490,7 @@ void MainWindow::renderGammaTab(App& app)
 
     for (int i = 1; i <= 255; ++i) {
         double linear = i / 255.0;
-        double normalized_out;
+        double normalized_out = linear;  // Default to identity
 
         // Apply the appropriate transfer function
         if (is_custom_mode && !ui_curve_points_.empty()) {
@@ -440,25 +520,27 @@ void MainWindow::renderGammaTab(App& app)
         }
         else {
             switch (transfer_function_index_) {
-                case 1: { // sRGB
+                case 0: // Neutral (Identity)
+                    normalized_out = linear;
+                    break;
+                case 2: { // Shadow Lift
                     if (linear <= 0.0031308)
                         normalized_out = 12.92 * linear;
                     else
                         normalized_out = 1.055 * std::pow(linear, 1.0 / 2.4) - 0.055;
                     break;
                 }
-                case 2: { // Rec.709
+                case 3: { // Soft Contrast
                     if (linear < 0.018)
                         normalized_out = 4.5 * linear;
                     else
                         normalized_out = 1.099 * std::pow(linear, 0.45) - 0.099;
                     break;
                 }
-                case 3: { // DCI-P3
+                case 4: // Cinema (Gamma 2.6)
                     normalized_out = std::pow(linear, 1.0 / 2.6);
                     break;
-                }
-                case 0: // Power
+                case 1: // Simple Gamma
                 default:
                     normalized_out = std::pow(linear, 1.0 / gamma);
                     break;
@@ -504,6 +586,11 @@ void MainWindow::renderGammaTab(App& app)
                 } else if (is_last_point) {
                     new_x = 1.0;
                 }
+
+                // Constrain Y to Windows API valid zone (50-150% of identity)
+                double min_y = new_x * 0.5;
+                double max_y = (std::min)(1.0, new_x * 1.5 + 0.05);
+                new_y = std::clamp(new_y, min_y, max_y);
 
                 ui_curve_points_[selected_point_index_].x = new_x;
                 ui_curve_points_[selected_point_index_].y = new_y;
@@ -560,6 +647,11 @@ void MainWindow::renderGammaTab(App& app)
                     new_x = std::clamp(new_x, 0.0, 1.0);
                     new_y = std::clamp(new_y, 0.0, 1.0);
 
+                    // Constrain Y to Windows API valid zone (50-150% of identity)
+                    double min_y = new_x * 0.5;
+                    double max_y = (std::min)(1.0, new_x * 1.5 + 0.05);
+                    new_y = std::clamp(new_y, min_y, max_y);
+
                     ui_curve_points_.push_back({new_x, new_y});
                     std::sort(ui_curve_points_.begin(), ui_curve_points_.end());
                     app.setCustomCurvePoints(ui_curve_points_);
@@ -597,15 +689,18 @@ void MainWindow::renderGammaTab(App& app)
     ImGui::Spacing();
 
     // Reset button
-    if (ImGui::Button("Reset to Default", ImVec2(-1, 0))) {
+    if (ImGui::Button("Restore Captured Defaults", ImVec2(-1, 0))) {
         app.resetGamma();
         // Slider will auto-sync on next frame
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Restores the GPU output curve captured at startup");
     }
 
     // Hotkey hint
     ImGui::Spacing();
     ImGui::Spacing();
-    ImGui::TextDisabled("Hotkeys: Ctrl+Alt+Up/Down, Ctrl+Alt+R");
+    ImGui::TextDisabled("Hotkeys: Ctrl+Alt+Up/Down (adjust), Ctrl+Alt+R (reset)");
 
     // Status at bottom
     ImGui::Spacing();
@@ -617,18 +712,33 @@ void MainWindow::renderHelpTab()
 {
     ImGui::Spacing();
 
-    ImGui::TextUnformatted("Usage");
+    ImGui::TextUnformatted("What This Tool Does");
     ImGui::Separator();
     ImGui::Spacing();
 
     ImGui::TextWrapped(
-        "Use the slider to adjust your monitor's gamma value. "
-        "Gamma affects the brightness and contrast of your display.");
+        "Lumos applies a global GPU output remap (1D LUT) to all displays. "
+        "This is a quick visibility tweak for dark scenes, NOT color calibration.");
 
     ImGui::Spacing();
-    ImGui::BulletText("Values < 1.0: Darker image");
-    ImGui::BulletText("Value = 1.0: Normal (default)");
-    ImGui::BulletText("Values > 1.0: Brighter image");
+    ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.6f, 1.0f), "Important:");
+    ImGui::BulletText("Affects the entire desktop and all applications");
+    ImGui::BulletText("Applied after Windows color management");
+    ImGui::BulletText("No ICC profiles or measurements involved");
+    ImGui::BulletText("Use Reset to restore captured defaults");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::TextUnformatted("Tone Curve Presets");
+    ImGui::Spacing();
+    ImGui::BulletText("Neutral: Identity curve (no change)");
+    ImGui::BulletText("Simple Gamma: Traditional power-law curve");
+    ImGui::BulletText("Shadow Lift: Raises dark values for visibility");
+    ImGui::BulletText("Soft Contrast: Gentle S-curve");
+    ImGui::BulletText("Cinema: Aggressive gamma 2.6 curve");
+    ImGui::BulletText("Custom: Edit your own curve");
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -640,11 +750,11 @@ void MainWindow::renderHelpTab()
     ImGui::Columns(2, "hotkeys", false);
     ImGui::SetColumnWidth(0, 150);
     ImGui::Text("Ctrl+Alt+Up"); ImGui::NextColumn();
-    ImGui::Text("Increase gamma"); ImGui::NextColumn();
+    ImGui::Text("Increase curve strength"); ImGui::NextColumn();
     ImGui::Text("Ctrl+Alt+Down"); ImGui::NextColumn();
-    ImGui::Text("Decrease gamma"); ImGui::NextColumn();
+    ImGui::Text("Decrease curve strength"); ImGui::NextColumn();
     ImGui::Text("Ctrl+Alt+R"); ImGui::NextColumn();
-    ImGui::Text("Reset to default"); ImGui::NextColumn();
+    ImGui::Text("Restore captured defaults"); ImGui::NextColumn();
     ImGui::Columns(1);
 
     ImGui::Spacing();
@@ -654,19 +764,9 @@ void MainWindow::renderHelpTab()
     ImGui::TextUnformatted("Command Line");
     ImGui::Spacing();
     ImGui::TextDisabled("lumos              Open the GUI");
-    ImGui::TextDisabled("lumos 1.2          Set gamma to 1.2 and exit");
+    ImGui::TextDisabled("lumos 1.2          Set curve strength and exit");
     ImGui::TextDisabled("lumos --help       Show help");
     ImGui::TextDisabled("lumos --version    Show version");
-
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    ImGui::TextUnformatted("Visualization Tools");
-    ImGui::Spacing();
-    ImGui::BulletText("Gamma Curve: Real-time visualization of gamma correction");
-    ImGui::BulletText("Tick Marks: Common gamma values marked on slider");
-    ImGui::BulletText("Test Pattern: B&W stripes for calibration (Help menu)");
 }
 
 void MainWindow::renderAboutTab()

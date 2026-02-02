@@ -6,6 +6,10 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
@@ -13,6 +17,7 @@
 #include "imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
+#include "implot.h"
 
 #include "app.h"
 #include "cli.h"
@@ -124,6 +129,7 @@ int WINAPI WinMain(
     // Setup ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.IniFilename = nullptr; // Disable imgui.ini
@@ -199,6 +205,7 @@ int WINAPI WinMain(
 
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
+    ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
     CleanupDeviceD3D();

@@ -22,6 +22,18 @@ target_include_directories(imgui PUBLIC
 
 target_link_libraries(imgui PUBLIC d3d11 dxgi)
 
+# ImPlot library (plotting extension for ImGui)
+add_library(implot STATIC
+    third_party/implot/implot.cpp
+    third_party/implot/implot_items.cpp
+)
+
+target_include_directories(implot PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/implot
+)
+
+target_link_libraries(implot PUBLIC imgui)
+
 # Main executable (WIN32 = no console window)
 add_executable(lumos WIN32
     src/main.cpp
@@ -30,6 +42,7 @@ add_executable(lumos WIN32
     src/config.cpp
     src/platform/win32/gamma.cpp
     src/platform/win32/hotkeys.cpp
+    src/platform/win32/screen_histogram.cpp
     src/platform/win32/tray.cpp
     src/ui/main_window.cpp
     resources/lumos.rc
@@ -39,6 +52,7 @@ target_include_directories(lumos PRIVATE src)
 
 target_link_libraries(lumos PRIVATE
     imgui
+    implot
     dwmapi
 )
 

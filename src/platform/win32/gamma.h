@@ -1,4 +1,4 @@
-// Lumos - Gamma control module
+// limos - Gamma control module
 // Copyright (C) 2026 Ian Dirk Armstrong
 // License: GPL v2
 
@@ -6,6 +6,10 @@
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+
+#ifndef NOMINMAX
+#define NOMINMAX
 #endif
 
 #include <windows.h>
@@ -24,14 +28,16 @@ struct CurvePoint {
     bool operator<(const CurvePoint& other) const { return x < other.x; }
 };
 
-// Transfer function types for gamma correction
-enum class TransferFunction {
-    Power,      // Pure power-law gamma (traditional)
-    sRGB,       // sRGB with linear segment near black
-    Rec709,     // Rec.709 / Rec.2020 (broadcast standard)
-    Rec2020,    // Rec.2020 (alias for Rec709, same transfer)
-    DCIP3,      // DCI-P3 (pure gamma 2.6)
-    Custom,     // User-defined curve with control points
+// Tone curve presets for GPU output remapping
+// NOTE: These are NOT calibrated color-space transforms - they are simple
+// 1D LUTs applied globally via SetDeviceGammaRamp, affecting the entire desktop.
+enum class ToneCurve {
+    Linear,       // Identity curve (no adjustment)
+    Power,        // Simple power-law gamma curve
+    ShadowLift,   // Lifts shadow detail (sRGB-like shape, NOT actual sRGB)
+    SoftContrast, // Gentle S-curve contrast (Rec.709-like shape)
+    Cinema,       // Aggressive gamma 2.6 curve
+    Custom,       // User-defined curve with control points
 };
 
 struct GammaRamp {
@@ -60,14 +66,14 @@ public:
     // Restore all original gamma ramps
     bool restoreAll();
 
-    // Apply gamma value to all monitors
+    // Apply tone curve to all monitors
     bool applyAll(double value);
-    bool applyAll(TransferFunction func, double value,
+    bool applyAll(ToneCurve curve, double strength,
                   const std::vector<CurvePoint>* custom_curve = nullptr);
 
-    // Apply gamma value to specific monitor
+    // Apply tone curve to specific monitor
     bool apply(size_t monitor_index, double value);
-    bool apply(size_t monitor_index, TransferFunction func, double value,
+    bool apply(size_t monitor_index, ToneCurve curve, double strength,
                const std::vector<CurvePoint>* custom_curve = nullptr);
 
     // Restore specific monitor
@@ -97,7 +103,7 @@ private:
 
     bool captureRamp(MonitorInfo& monitor);
     bool applyRamp(const MonitorInfo& monitor, const GammaRamp& ramp);
-    static GammaRamp buildRamp(TransferFunction func, double gamma,
+    static GammaRamp buildRamp(ToneCurve curve, double strength,
                                const std::vector<CurvePoint>* custom_curve = nullptr);
 };
 

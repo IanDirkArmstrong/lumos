@@ -6,11 +6,16 @@
 
 #include "config.h"
 #include "platform/win32/gamma.h"
+#include "platform/win32/screen_histogram.h"
 #include "platform/win32/tray.h"
 #include "platform/win32/hotkeys.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+
+#ifndef NOMINMAX
+#define NOMINMAX
 #endif
 
 #include <windows.h>
@@ -31,8 +36,8 @@ public:
     // Set gamma value (applies immediately to all monitors)
     void setGamma(double value);
 
-    // Set transfer function (applies immediately with current gamma)
-    void setTransferFunction(platform::TransferFunction func);
+    // Set tone curve preset (applies immediately)
+    void setToneCurve(platform::ToneCurve curve);
 
     // Adjust gamma by delta
     void adjustGamma(double delta);
@@ -43,8 +48,8 @@ public:
     // Get current gamma value
     double getGamma() const { return current_gamma_; }
 
-    // Get current transfer function
-    platform::TransferFunction getTransferFunction() const { return transfer_function_; }
+    // Get current tone curve preset
+    platform::ToneCurve getToneCurve() const { return tone_curve_; }
 
     // Custom curve management
     const std::vector<platform::CurvePoint>& getCustomCurvePoints() const { return custom_curve_points_; }
@@ -82,15 +87,21 @@ public:
     // Get reference to gamma module (for crash handler)
     platform::Gamma& getGammaRef() { return gamma_; }
 
+    // Screen histogram access
+    platform::ScreenHistogram getScreenHistogram() const { return histogram_.getHistogram(); }
+    void setHistogramEnabled(bool enabled) { histogram_.setEnabled(enabled); }
+    bool isHistogramEnabled() const { return histogram_.isEnabled(); }
+
 private:
     Config config_;
     platform::Gamma gamma_;
+    platform::ScreenHistogramCapture histogram_;
     platform::Tray tray_;
     platform::Hotkeys hotkeys_;
 
     HWND hwnd_ = nullptr;
     double current_gamma_ = 1.0;
-    platform::TransferFunction transfer_function_ = platform::TransferFunction::Power;
+    platform::ToneCurve tone_curve_ = platform::ToneCurve::Power;
     std::vector<platform::CurvePoint> custom_curve_points_;
     bool window_visible_ = true;
     bool should_exit_ = false;

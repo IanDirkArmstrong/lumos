@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <array>
 #include <vector>
 #include "../platform/win32/gamma.h"
 
@@ -42,6 +43,11 @@ private:
     std::vector<lumos::platform::CurvePoint> ui_curve_points_;
     int selected_point_index_ = -1;  // -1 = none selected
     bool dragging_point_ = false;
+
+    // Histogram display
+    bool show_histogram_ = true;
+    std::array<float, 256> histogram_xs_{};   // X values (0-1)
+    std::array<float, 256> histogram_ys_{};   // Y values (normalized)
 
     // Tab visibility
     bool show_help_tab_ = false;

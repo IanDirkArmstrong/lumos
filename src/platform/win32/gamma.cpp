@@ -3,34 +3,38 @@
 // License: GPL v2
 
 #include "gamma.h"
+#include <algorithm>
 #include <cmath>
 
 namespace lumos::platform {
 
-// Transfer function implementations
+// Tone curve shape functions
+// NOTE: These are NOT calibrated transforms - they produce curve SHAPES
+// that happen to resemble certain standards, but are applied as simple
+// GPU output remaps with no device characterization or measurement.
 namespace {
 
-// sRGB transfer function (EOTF inverse - encoding)
-double sRGBTransfer(double linear) {
+// Shadow-lifting curve (raises dark values, sRGB-like shape)
+double ShadowLiftCurve(double linear) {
     if (linear <= 0.0031308)
         return 12.92 * linear;
     return 1.055 * std::pow(linear, 1.0 / 2.4) - 0.055;
 }
 
-// Rec.709 / Rec.2020 transfer function
-double Rec709Transfer(double linear) {
+// Soft contrast curve (gentle S-shape, Rec.709-like)
+double SoftContrastCurve(double linear) {
     const double beta = 0.018;
     const double alpha = 1.099;
-    const double gamma = 0.45;
+    const double gamma_exp = 0.45;
 
     if (linear < beta)
         return 4.5 * linear;
-    return alpha * std::pow(linear, gamma) - (alpha - 1.0);
+    return alpha * std::pow(linear, gamma_exp) - (alpha - 1.0);
 }
 
-// Pure power-law gamma
-double PowerTransfer(double linear, double gamma) {
-    return std::pow(linear, 1.0 / gamma);
+// Simple power-law curve
+double PowerCurve(double linear, double strength) {
+    return std::pow(linear, 1.0 / strength);
 }
 
 } // anonymous namespace
@@ -115,32 +119,35 @@ bool Gamma::applyRamp(const MonitorInfo& monitor, const GammaRamp& ramp)
     return result != FALSE;
 }
 
-GammaRamp Gamma::buildRamp(TransferFunction func, double gamma,
+GammaRamp Gamma::buildRamp(ToneCurve curve, double strength,
                            const std::vector<CurvePoint>* custom_curve)
 {
-    if (gamma < 0.1) gamma = 0.1;
-    if (gamma > 9.0) gamma = 9.0;
+    if (strength < 0.1) strength = 0.1;
+    if (strength > 9.0) strength = 9.0;
 
     GammaRamp ramp{};
     for (int i = 0; i < 256; ++i) {
         double linear = i / 255.0;
         double corrected;
 
-        switch (func) {
-            case TransferFunction::sRGB:
-                corrected = sRGBTransfer(linear);
+        switch (curve) {
+            case ToneCurve::Linear:
+                corrected = linear;  // Identity - no change
                 break;
 
-            case TransferFunction::Rec709:
-            case TransferFunction::Rec2020:  // Same transfer function
-                corrected = Rec709Transfer(linear);
+            case ToneCurve::ShadowLift:
+                corrected = ShadowLiftCurve(linear);
                 break;
 
-            case TransferFunction::DCIP3:
-                corrected = PowerTransfer(linear, 2.6);
+            case ToneCurve::SoftContrast:
+                corrected = SoftContrastCurve(linear);
                 break;
 
-            case TransferFunction::Custom:
+            case ToneCurve::Cinema:
+                corrected = PowerCurve(linear, 2.6);
+                break;
+
+            case ToneCurve::Custom:
                 if (custom_curve && custom_curve->size() >= 2) {
                     // Linear interpolation between control points
                     const auto& points = *custom_curve;
@@ -156,6 +163,7 @@ GammaRamp Gamma::buildRamp(TransferFunction func, double gamma,
                     }
                     else {
                         // Interpolate between two points
+                        corrected = linear;  // Safe default
                         for (size_t j = 0; j < points.size() - 1; ++j) {
                             if (linear >= points[j].x && linear <= points[j + 1].x) {
                                 double x1 = points[j].x;
@@ -164,7 +172,7 @@ GammaRamp Gamma::buildRamp(TransferFunction func, double gamma,
                                 double y2 = points[j + 1].y;
 
                                 // Linear interpolation
-                                double t = (linear - x1) / (x2 - x1);
+                                double t = (x2 > x1) ? (linear - x1) / (x2 - x1) : 0.0;
                                 corrected = y1 + t * (y2 - y1);
                                 break;
                             }
@@ -177,15 +185,23 @@ GammaRamp Gamma::buildRamp(TransferFunction func, double gamma,
                 }
                 break;
 
-            case TransferFunction::Power:
+            case ToneCurve::Power:
             default:
-                corrected = PowerTransfer(linear, gamma);
+                corrected = PowerCurve(linear, strength);
                 break;
         }
 
         // Clamp to valid range
         if (corrected < 0.0) corrected = 0.0;
         if (corrected > 1.0) corrected = 1.0;
+
+        // Windows SetDeviceGammaRamp restricts values to roughly 50-150% of identity.
+        // Clamp output to prevent API failures (min ~half identity, max ~1.5x identity)
+        double identity = linear;
+        double min_allowed = identity * 0.5;
+        double max_allowed = (std::min)(1.0, identity * 1.5 + 0.05);  // +0.05 for headroom at low values
+        if (corrected < min_allowed) corrected = min_allowed;
+        if (corrected > max_allowed) corrected = max_allowed;
 
         WORD val = static_cast<WORD>(corrected * 65535.0);
         ramp.red[i] = val;
@@ -210,13 +226,13 @@ bool Gamma::restoreAll()
 
 bool Gamma::applyAll(double value)
 {
-    return applyAll(TransferFunction::Power, value, nullptr);
+    return applyAll(ToneCurve::Power, value, nullptr);
 }
 
-bool Gamma::applyAll(TransferFunction func, double value,
+bool Gamma::applyAll(ToneCurve curve, double strength,
                      const std::vector<CurvePoint>* custom_curve)
 {
-    GammaRamp ramp = buildRamp(func, value, custom_curve);
+    GammaRamp ramp = buildRamp(curve, strength, custom_curve);
     bool success = true;
     for (const auto& monitor : monitors_) {
         if (!applyRamp(monitor, ramp)) {
@@ -228,15 +244,15 @@ bool Gamma::applyAll(TransferFunction func, double value,
 
 bool Gamma::apply(size_t monitor_index, double value)
 {
-    return apply(monitor_index, TransferFunction::Power, value, nullptr);
+    return apply(monitor_index, ToneCurve::Power, value, nullptr);
 }
 
-bool Gamma::apply(size_t monitor_index, TransferFunction func, double value,
+bool Gamma::apply(size_t monitor_index, ToneCurve curve, double strength,
                   const std::vector<CurvePoint>* custom_curve)
 {
     if (monitor_index >= monitors_.size()) return false;
 
-    GammaRamp ramp = buildRamp(func, value, custom_curve);
+    GammaRamp ramp = buildRamp(curve, strength, custom_curve);
     return applyRamp(monitors_[monitor_index], ramp);
 }
 
