@@ -306,4 +306,62 @@ bool Config::save()
     return true;
 }
 
+// CurveIO namespace implementation
+namespace CurveIO {
+
+bool saveCurve(const std::string& path, const std::vector<platform::CurvePoint>& points)
+{
+    std::ofstream file(path);
+    if (!file.is_open()) return false;
+
+    file << "# Lumos Curve File\n";
+    for (const auto& pt : points) {
+        file << pt.x << ":" << pt.y << "\n";
+    }
+
+    return true;
+}
+
+std::vector<platform::CurvePoint> loadCurve(const std::string& path)
+{
+    std::vector<platform::CurvePoint> points;
+
+    std::ifstream file(path);
+    if (!file.is_open()) return points;
+
+    std::string line;
+    while (std::getline(file, line)) {
+        // Skip empty lines and comments
+        if (line.empty() || line[0] == '#') continue;
+
+        // Parse "x:y" format
+        size_t colon_pos = line.find(':');
+        if (colon_pos == std::string::npos) continue;
+
+        try {
+            double x = std::stod(line.substr(0, colon_pos));
+            double y = std::stod(line.substr(colon_pos + 1));
+
+            // Validate range
+            if (x >= 0.0 && x <= 1.0 && y >= 0.0 && y <= 1.0) {
+                points.push_back({x, y});
+            }
+        } catch (...) {
+            // Skip invalid lines
+        }
+    }
+
+    // Ensure at least 2 points for a valid curve
+    if (points.size() < 2) {
+        return {};  // Return empty on invalid file
+    }
+
+    // Sort by x-coordinate
+    std::sort(points.begin(), points.end());
+
+    return points;
+}
+
+} // namespace CurveIO
+
 } // namespace lumos

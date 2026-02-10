@@ -81,4 +81,13 @@ private:
     std::filesystem::path getConfigPath();
 };
 
+// Curve file I/O utilities
+namespace CurveIO {
+    // Save curve points to a .curve file
+    bool saveCurve(const std::string& path, const std::vector<platform::CurvePoint>& points);
+
+    // Load curve points from a .curve file (returns empty vector on failure)
+    std::vector<platform::CurvePoint> loadCurve(const std::string& path);
+}
+
 } // namespace lumos

@@ -5,6 +5,7 @@
 #pragma once
 
 #include <array>
+#include <string>
 #include <vector>
 #include "../platform/win32/gamma.h"
 #include "../config.h"
@@ -94,6 +95,9 @@ private:
     // Icon textures for status bar
     ID3D11ShaderResourceView* bolt_texture_ = nullptr;
     ID3D11ShaderResourceView* bolt_slash_texture_ = nullptr;
+
+    // File dialog state
+    std::string last_curve_directory_;
 };
 
 } // namespace lumos::ui

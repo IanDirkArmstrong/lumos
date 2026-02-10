@@ -118,6 +118,9 @@ public:
     void setHistogramEnabled(bool enabled) { histogram_.setEnabled(enabled); }
     bool isHistogramEnabled() const { return histogram_.isEnabled(); }
 
+    // Get window handle (for native dialogs)
+    void* getHwnd() const { return hwnd_; }
+
 private:
     Config config_;
     platform::Gamma gamma_;

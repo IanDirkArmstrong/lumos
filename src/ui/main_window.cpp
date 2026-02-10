@@ -17,6 +17,7 @@
 #include "../../resources/resource.h"
 #include "imgui.h"
 #include "implot.h"
+#include "../platform/win32/file_dialog.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -265,6 +266,27 @@ void MainWindow::renderMenuBar(App& app)
 {
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("Load Curve...", "Ctrl+O")) {
+                std::string path = platform::openCurveFileDialog(app.getHwnd(), last_curve_directory_);
+                if (!path.empty()) {
+                    last_curve_directory_ = platform::getDirectoryFromPath(path);
+                    auto points = CurveIO::loadCurve(path);
+                    if (!points.empty()) {
+                        ui_curve_points_ = points;
+                        app.setCustomCurvePoints(points);
+                        transfer_function_index_ = 5;  // Switch to Custom
+                        app.setToneCurve(platform::ToneCurve::Custom);
+                    }
+                }
+            }
+            if (ImGui::MenuItem("Save Curve...", "Ctrl+S")) {
+                std::string path = platform::saveCurveFileDialog(app.getHwnd(), last_curve_directory_);
+                if (!path.empty()) {
+                    last_curve_directory_ = platform::getDirectoryFromPath(path);
+                    CurveIO::saveCurve(path, ui_curve_points_);
+                }
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Close to Tray")) {
                 // Hide window to tray
                 app.hideWindow();
@@ -982,7 +1004,7 @@ void MainWindow::renderAboutTab()
 {
     ImGui::Spacing();
 
-    ImGui::TextUnformatted("Lumos v0.3.0");
+    ImGui::TextUnformatted("Lumos v0.4.0");
     ImGui::Separator();
     ImGui::Spacing();
 

@@ -11,6 +11,7 @@
 #endif
 
 #include <windows.h>
+#include <objbase.h>
 #include <d3d11.h>
 #include <dxgi.h>
 
@@ -68,6 +69,9 @@ int WINAPI WinMain(
     (void)hPrevInstance;
     (void)lpCmdLine;
     (void)nCmdShow;
+
+    // Initialize COM (required for native file dialogs)
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
     // Set up crash handler
     SetUnhandledExceptionFilter(CrashHandler);
@@ -213,6 +217,7 @@ int WINAPI WinMain(
     DestroyWindow(hwnd);
     UnregisterClassW(wc.lpszClassName, hInstance);
 
+    CoUninitialize();
     return 0;
 }
 
